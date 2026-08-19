@@ -1,0 +1,456 @@
+# EHOS - Enterprise Hospital Operating System
+# Production deployment (single host / small hospital model).
+#
+# Use when a Kubernetes cluster is not justified yet:
+#   cp infrastructure/docker-compose.prod.env.example .env.prod   # edit secrets
+#   docker compose -f infrastructure/docker-compose.prod.yml --env-file .env.prod build
+#   docker compose -f infrastructure/docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Medium/enterprise deployments move to Kubernetes + Helm
+# (see DEPLOYMENT_ARCHITECTURE.md and infrastructure/kubernetes, infrastructure/helm).
+
+name: ehos-prod
+
+x-backend: &backend
+  restart: unless-stopped
+  networks: [ehos-internal]
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+  env_file: [.env.prod]
+
+x-data: &data
+  restart: unless-stopped
+  networks: [ehos-data]
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  # --- Edge: HAProxy (L4/L7) in front of NGINX ------------------------------
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: ehos-prod-haproxy
+    restart: unless-stopped
+    networks: [ehos-edge]
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      nginx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "443"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # --- NGINX: TLS reverse proxy + static SPA hosting (acts as k8s ingress in compose) ---
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ehos-prod-nginx
+    restart: unless-stopped
+    networks: [ehos-edge, ehos-internal]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/spa.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      # frontend build outputs (bind-mount in an image-built deployment instead)
+      - ../frontend/apps/ehr-portal/dist:/usr/share/nginx/html/ehr:ro
+      - ../frontend/apps/patient-registration/dist:/usr/share/nginx/html/register:ro
+      - ../frontend/apps/executive-dashboard/dist:/usr/share/nginx/html/dash:ro
+      - ../frontend/apps/ai-assistant/dist:/usr/share/nginx/html/assistant:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # --- Data plane -------------------------------------------------------------
+  postgres:
+    <<: *data
+    image: postgres:16-alpine
+    container_name: ehos-prod-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.prod}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    ports: ["5432:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-ehos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    <<: *data
+    image: redis:7-alpine
+    container_name: ehos-prod-redis
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    ports: ["6379:6379"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    <<: *data
+    image: bitnami/kafka:3.6
+    container_name: ehos-prod-kafka
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: broker,controller
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,PLAINTEXT_HOST://:19092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://${EHOS_PUBLIC_HOST:-localhost}:19092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes: [kafka_data:/bitnami/kafka]
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  minio:
+    <<: *data
+    image: minio/minio:RELEASE.2024-08-26T01-01-28Z
+    container_name: ehos-prod-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ehos}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio_data:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    <<: *data
+    image: qdrant/qdrant:v1.10.1
+    container_name: ehos-prod-qdrant
+    ports: ["6333:6333", "6334:6334"]
+    volumes: [qdrant_data:/qdrant/storage]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:6333/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    <<: *data
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: ehos-prod-keycloak
+    command: ["start", "--import-realm", "--hostname-strict=false", "--http-enabled=true", "--proxy-headers=xforwarded"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/ehos_keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-ehos}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      EHOS_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      EHOS_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports: ["8400:8080"]
+    volumes:
+      - ../backend/identity-service/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /realms/ehos HTTP/1.0\r\n\r' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 40s
+
+  # --- Platform services ------------------------------------------------------
+  api-gateway:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/api-gateway:${TAG:-latest}
+    build: { context: .., dockerfile: backend/api-gateway/Dockerfile }
+    container_name: ehos-prod-api-gateway
+    ports: ["8000:8000"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ehos
+      EHOS_ENV: production
+    depends_on:
+      redis: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
+
+  configuration-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/configuration-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/configuration-service/Dockerfile }
+    container_name: ehos-prod-configuration
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  audit-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/audit-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/audit-service/Dockerfile }
+    container_name: ehos-prod-audit
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  notification-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/notification-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/notification-service/Dockerfile }
+    container_name: ehos-prod-notification
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  # --- Clinical services ------------------------------------------------------
+  authentication-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/authentication-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/authentication-service/Dockerfile }
+    container_name: ehos-prod-authentication
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ehos
+      EHOS_ENV: production
+    depends_on:
+      keycloak: { condition: service_healthy }
+
+  patient-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/patient-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/patient-service/Dockerfile }
+    container_name: ehos-prod-patient
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  ehr-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/ehr-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/ehr-service/Dockerfile }
+    container_name: ehos-prod-ehr
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  # --- AI / data plane --------------------------------------------------------
+  knowledge-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/knowledge-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/knowledge-service/Dockerfile }
+    container_name: ehos-prod-knowledge
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      QDRANT_URL: http://qdrant:6333
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ehos}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  ai-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/ai-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/ai-service/Dockerfile }
+    container_name: ehos-prod-ai
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      AI_INFERENCE_ADAPTER: ${AI_INFERENCE_ADAPTER:-vllm}
+      AI_EMBEDDING_ADAPTER: ${AI_EMBEDDING_ADAPTER:-ollama}
+      AI_INFERENCE_URL: http://inference:8001
+      AI_KNOWLEDGE_SERVICE_URL: http://knowledge-service:8505
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      knowledge-service: { condition: service_started }
+
+  prediction-service:
+    <<: *backend
+    image: ${REGISTRY:-ehos}/prediction-service:${TAG:-latest}
+    build: { context: .., dockerfile: backend/prediction-service/Dockerfile }
+    container_name: ehos-prod-prediction
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      PREDICTION_DEFAULT_ADAPTER: ${PREDICTION_DEFAULT_ADAPTER:-seasonal_naive}
+      EHOS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+
+  # --- GPU inference (vLLM); LAN-only, never behind public ingress -----------
+  inference:
+    image: vllm/vllm-openai:latest
+    container_name: ehos-prod-inference
+    restart: unless-stopped
+    networks: [ehos-internal]
+    command: ["--model", "${LLM_MODEL:-Qwen/Qwen2.5-14B-Instruct}", "--port", "8001", "--gpu-memory-utilization", "0.90"]
+    ports: ["8001:8001"]
+    volumes:
+      - ../ai/models:/models:ro
+      - ${HF_HOME:-/tmp/huggingface}:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # --- Monitoring plane -------------------------------------------------------
+  prometheus:
+    <<: *data
+    image: prom/prometheus:v2.53.0
+    container_name: ehos-prod-prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ../monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+
+  grafana:
+    <<: *data
+    image: grafana/grafana:11.1.0
+    container_name: ehos-prod-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports: ["3000:3000"]
+
+  loki:
+    <<: *data
+    image: grafana/loki:3.1.0
+    container_name: ehos-prod-loki
+    ports: ["3100:3100"]
+    volumes:
+      - ../monitoring/loki:/etc/loki:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/loki-config.yaml
+
+  tempo:
+    <<: *data
+    image: grafana/tempo:2.5.0
+    container_name: ehos-prod-tempo
+    ports: ["3200:3200", "9095:9095"]
+    volumes:
+      - ../monitoring/tempo:/etc/tempo:ro
+      - tempo_data:/tmp/tempo
+    command: -config.file=/etc/tempo/tempo.yaml
+
+  # --- Backup server (runs the backup/restore scripts; see infrastructure/backup) --
+  backup-scheduler:
+    image: ${REGISTRY:-ehos}/backup:${TAG:-latest}
+    build: { context: ./backup, dockerfile: Dockerfile }
+    container_name: ehos-prod-backup
+    restart: unless-stopped
+    networks: []
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ehos}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      QDRANT_URL: http://qdrant:6333
+      BACKUP_DIR: /backups
+      BACKUP_TARGET_S3_ENDPOINT: ${BACKUP_TARGET_S3_ENDPOINT:-}
+      BACKUP_TARGET_ACCESS_KEY: ${BACKUP_TARGET_ACCESS_KEY:-}
+      BACKUP_TARGET_SECRET_KEY: ${BACKUP_TARGET_SECRET_KEY:-}
+      BACKUP_TARGET_BUCKET: ${BACKUP_TARGET_BUCKET:-ehos-backups}
+    volumes:
+      - backup_data:/backups
+    command: >
+      sh -c "echo '*/10 * * * * /ops/backup.sh --incremental >/proc/1/fd/1 2>&1' > /etc/crontabs/root
+      && echo '30 1 * * * /ops/backup.sh --full >/proc/1/fd/1 2>&1' >> /etc/crontabs/root
+      && echo '30 2 * * * /ops/backup.sh --prune >/proc/1/fd/1 2>&1' >> /etc/crontabs/root
+      && crond -f -l 8"
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
+  minio_data:
+  qdrant_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  tempo_data:
+  backup_data:
+
+networks:
+  ehos-edge:
+    driver: bridge
+  ehos-internal:
+    driver: bridge
+  ehos-data:
+    driver: bridge

@@ -1,0 +1,69 @@
+openapi: 3.0.3
+info:
+  title: EHOS Notification Service
+  version: 0.1.0
+  description: SMS, Email, Push, and In-app notification delivery. Full schema at /api/v1/openapi.json.
+servers:
+  - url: http://localhost:8300
+paths:
+  /api/v1/templates:
+    post:
+      summary: Create or update a notification template
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template_key, channel, body_template]
+              properties:
+                template_key: { type: string }
+                channel: { type: string, enum: [email, sms, push, in_app] }
+                subject: { type: string }
+                body_template: { type: string }
+      responses:
+        '201':
+          description: Template created
+  /api/v1/templates/{template_key}:
+    get:
+      summary: Get a notification template
+      tags: [notifications]
+      parameters:
+        - name: template_key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Template returned
+        '404':
+          description: Not found
+  /api/v1/send:
+    post:
+      summary: Send a notification
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient, channel]
+              properties:
+                template_key: { type: string }
+                recipient: { type: string }
+                channel: { type: string, enum: [email, sms, push, in_app] }
+                subject: { type: string }
+                body: { type: string }
+                variables: { type: object }
+      responses:
+        '201':
+          description: Notification sent or queued
+  /api/v1/health:
+    get:
+      summary: Health check
+      tags: [notifications]
+      responses:
+        '200':
+          description: Healthy

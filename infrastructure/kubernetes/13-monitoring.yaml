@@ -1,0 +1,266 @@
+# 13-monitoring.yaml — Prometheus, Grafana and Loki on the monitoring plane.
+# Config mounts the repo's monitoring/ content; scraping uses k8s pod/endpoint
+# discovery (prometheus.io/scrape annotations on workloads).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus
+  namespace: ehos-monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    scrape_configs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - { source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape], action: keep, regex: "true" }
+          - { source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path], action: replace, target_label: __metrics_path__, regex: (.+) }
+          - { source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port], action: replace, regex: ([^:]+)(?::\d+)?, target_label: __address__, replacement: "$1:$2" }
+      - job_name: node
+        kubernetes_sd_configs: [{ role: node }]
+        relabel_configs:
+          - { source_labels: [__address__], regex: "(.*):10250", target_label: __address__, replacement: "$1:9100" }
+          - action: labelmap, regex: __meta_kubernetes_node_label_(.+)
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: ehos-monitoring
+data:
+  ehos-alerts.yml: |
+    groups:
+      - name: ehos
+        rules:
+          - alert: EHOSServiceDown
+            expr: up == 0
+            for: 5m
+            labels: { severity: critical }
+            annotations: { summary: "EHOS workload {{ $labels.job }} is down" }
+          - alert: EHOSPostgresHighConnections
+            expr: pg_stat_database_numbackends > 200
+            for: 10m
+            labels: { severity: warning }
+            annotations: { summary: "Postgres connection count high" }
+          - alert: EHOSKafkaLag
+            expr: kafka_consumergroup_lag > 10000
+            for: 10m
+            labels: { severity: warning }
+            annotations: { summary: "Consumer group lag growing" }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prometheus
+  namespace: ehos-monitoring
+  labels: { app.kubernetes.io/name: prometheus }
+spec:
+  serviceName: prometheus
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: prometheus } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: prometheus, app.kubernetes.io/part-of: ehos }
+    spec:
+      securityContext: { fsGroup: 2000 }
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.53.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=30d
+            - --storage.tsdb.retention.size=30GB
+          ports: [{ name: http, containerPort: 9090 }]
+          volumeMounts:
+            - { name: cfg, mountPath: /etc/prometheus }
+            - { name: rules, mountPath: /etc/prometheus/rules }
+            - { name: data, mountPath: /prometheus }
+          readinessProbe: { httpGet: { path: /-/ready, port: 9090 }, periodSeconds: 10 }
+      volumes:
+        - name: cfg
+          configMap: { name: prometheus }
+        - name: rules
+          configMap: { name: prometheus-rules }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: ehos-fast
+        resources: { requests: { storage: 50Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: ehos-monitoring
+  labels: { app.kubernetes.io/name: prometheus }
+spec:
+  selector: { app.kubernetes.io/name: prometheus }
+  ports: [{ name: http, port: 9090 }]
+---
+# --- Grafana ---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: grafana
+  namespace: ehos-monitoring
+  labels: { app.kubernetes.io/name: grafana }
+spec:
+  serviceName: grafana
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: grafana } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: grafana, app.kubernetes.io/part-of: ehos } }
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.1.0
+          ports: [{ name: http, containerPort: 3000 }]
+          env:
+            - { name: GF_SECURITY_ADMIN_PASSWORD__FILE, value: /etc/grafana-secret/admin-password }
+          volumeMounts:
+            - { name: provisioning, mountPath: /etc/grafana/provisioning, readOnly: true }
+            - { name: ini, mountPath: /etc/grafana/grafana.ini, subPath: grafana.ini, readOnly: true }
+            - { name: dashboards, mountPath: /etc/grafana/provisioning/dashboards, readOnly: true }
+            - { name: data, mountPath: /var/lib/grafana }
+            - { name: sec, mountPath: /etc/grafana-secret, readOnly: true }
+          readinessProbe: { httpGet: { path: /api/health, port: 3000 }, periodSeconds: 10 }
+      volumes:
+        - name: provisioning
+          configMap: { name: grafana-datasources }
+        - name: ini
+          configMap: { name: grafana-ini }
+        - name: dashboards
+          configMap: { name: grafana-dashboards }
+        - name: sec
+          secret: { name: ehos-grafana }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: ehos-fast
+        resources: { requests: { storage: 5Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: ehos-monitoring
+  labels: { app.kubernetes.io/name: grafana }
+spec:
+  selector: { app.kubernetes.io/name: grafana }
+  ports: [{ name: http, port: 3000 }]
+---
+# --- Loki ---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: loki
+  namespace: ehos-monitoring
+  labels: { app.kubernetes.io/name: loki }
+spec:
+  serviceName: loki
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: loki } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: loki, app.kubernetes.io/part-of: ehos } }
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:3.1.0
+          args: [-config.file=/etc/loki/loki-config.yaml]
+          ports: [{ name: http, containerPort: 3100 }]
+          volumeMounts:
+            - { name: cfg, mountPath: /etc/loki, readOnly: true }
+            - { name: data, mountPath: /loki }
+          readinessProbe: { httpGet: { path: /ready, port: 3100 }, periodSeconds: 10 }
+      volumes:
+        - name: cfg
+          configMap: { name: loki-config }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: ehos-fast
+        resources: { requests: { storage: 50Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: ehos-monitoring
+  labels: { app.kubernetes.io/name: loki }
+spec:
+  selector: { app.kubernetes.io/name: loki }
+  ports: [{ name: http, port: 3100 }]
+---
+# ServiceMonitor (requires prometheus-operator) — used by the helm deployment.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ehos-apps
+  namespace: ehos-platform
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: ehos
+  endpoints:
+    - port: http
+      path: /metrics
+---
+# Grafana provisioning content (mirrors monitoring/grafana/provisioning).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: ehos-monitoring
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.ehos-monitoring.svc:9090
+        isDefault: true
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.ehos-monitoring.svc:3100
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.ehos-monitoring.svc:3200
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-ini
+  namespace: ehos-monitoring
+data:
+  grafana.ini: |
+    [server]
+    root_url = %(domain)s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: ehos-monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: EHOS
+        orgId: 1
+        folder: EHOS
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        options:
+          path: /etc/grafana/provisioning/dashboards

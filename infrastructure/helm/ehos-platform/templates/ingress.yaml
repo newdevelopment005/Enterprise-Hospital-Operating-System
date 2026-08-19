@@ -1,0 +1,36 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ehos
+  namespace: ehos-platform
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $host := .Values.ingress.hosts }}
+    - host: {{ $host.host }}
+      http:
+        paths:
+          {{- range $path, $backend := $host.paths }}
+          - path: {{ $path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $backend | splitList ":" | first }}
+                {{- if contains ":" $backend }}
+                port: { number: {{ $backend | splitList ":" | last | int }} }
+                {{- else }}
+                port: { name: http }
+                {{- end }}
+          {{- end }}
+    {{- end }}
+{{- end }}

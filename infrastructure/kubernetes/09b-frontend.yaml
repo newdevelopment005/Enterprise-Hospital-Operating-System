@@ -1,0 +1,123 @@
+# frontend.yaml — SPA deployments (nginx images built in CI from frontend/apps/*/dist).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ehr-portal
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: ehr-portal }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: ehr-portal } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: ehr-portal, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: web
+          image: ${REGISTRY}/frontend-ehr-portal:${TAG}
+          ports: [{ name: http, containerPort: 80 }]
+          readinessProbe: { httpGet: { path: /healthz, port: 80 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ehr-portal
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: ehr-portal }
+spec:
+  selector: { app.kubernetes.io/name: ehr-portal }
+  ports: [{ name: http, port: 80 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: patient-registration
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: patient-registration }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: patient-registration } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: patient-registration, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: web
+          image: ${REGISTRY}/frontend-patient-registration:${TAG}
+          ports: [{ name: http, containerPort: 80 }]
+          readinessProbe: { httpGet: { path: /healthz, port: 80 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: patient-registration
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: patient-registration }
+spec:
+  selector: { app.kubernetes.io/name: patient-registration }
+  ports: [{ name: http, port: 80 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: executive-dashboard
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: executive-dashboard }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: executive-dashboard } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: executive-dashboard, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: web
+          image: ${REGISTRY}/frontend-executive-dashboard:${TAG}
+          ports: [{ name: http, containerPort: 80 }]
+          readinessProbe: { httpGet: { path: /healthz, port: 80 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: executive-dashboard
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: executive-dashboard }
+spec:
+  selector: { app.kubernetes.io/name: executive-dashboard }
+  ports: [{ name: http, port: 80 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-assistant
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: ai-assistant }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: ai-assistant } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: ai-assistant, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: web
+          image: ${REGISTRY}/frontend-ai-assistant:${TAG}
+          ports: [{ name: http, containerPort: 80 }]
+          readinessProbe: { httpGet: { path: /healthz, port: 80 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 500m, memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-assistant
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: ai-assistant }
+spec:
+  selector: { app.kubernetes.io/name: ai-assistant }
+  ports: [{ name: http, port: 80 }]
+
+# NOTE: frontend SPAs proxy /api through the ingress; the nginx images include a
+#  static spa.conf with try_files fallback (see infrastructure/nginx/spa.conf).

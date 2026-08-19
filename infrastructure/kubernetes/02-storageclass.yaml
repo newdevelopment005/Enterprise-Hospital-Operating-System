@@ -1,0 +1,13 @@
+# storageclass.yaml — data-plane storage.
+# Default active profile uses the cluster's default storage class. For bare-metal
+# nodes use local-path / Rook-Ceph / Longhorn and set the annotation to default.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ehos-fast
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: local.csi.openebs.io  # or rancher.io/local-path / rook-ceph.rbd.csi.ceph.com
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+# parameters differ per provisioner; comment-out and set the one you run.

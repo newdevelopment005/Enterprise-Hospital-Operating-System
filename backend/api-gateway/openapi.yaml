@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: EHOS API Gateway
+  version: 0.1.0
+  description: Single entry point performing routing, JWT validation, rate limiting, and request correlation. Production can swap in Kong/Envoy/NGINX using the same route contract. Full schema at /api/v1/openapi.json.
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/v1/configuration/{path}:
+    get: { summary: Configuration service proxy, tags: [proxy] }
+    put: { summary: Configuration service proxy, tags: [proxy] }
+    patch: { summary: Configuration service proxy, tags: [proxy] }
+    post: { summary: Configuration service proxy, tags: [proxy] }
+    delete: { summary: Configuration service proxy, tags: [proxy] }
+  /api/v1/audit/{path}:
+    get: { summary: Audit service proxy, tags: [proxy] }
+    post: { summary: Audit service proxy, tags: [proxy] }
+  /api/v1/notifications/{path}:
+    get: { summary: Notification service proxy, tags: [proxy] }
+    post: { summary: Notification service proxy, tags: [proxy] }

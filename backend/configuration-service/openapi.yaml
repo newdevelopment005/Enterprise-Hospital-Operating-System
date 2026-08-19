@@ -1,0 +1,81 @@
+openapi: 3.0.3
+info:
+  title: EHOS Configuration Service
+  version: 0.1.0
+  description: Feature flags and reference configuration management. Full OpenAPI schema is served live at /api/v1/openapi.json.
+servers:
+  - url: http://localhost:8100
+paths:
+  /api/v1/flags:
+    post:
+      summary: Create a feature flag
+      tags: [configuration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                enabled: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Flag created
+    get:
+      summary: List feature flags
+      tags: [configuration]
+      responses:
+        '200':
+          description: Flags returned
+  /api/v1/flags/{name}:
+    patch:
+      summary: Enable or disable a feature flag
+      tags: [configuration]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Flag updated
+  /api/v1/entries:
+    get:
+      summary: List configuration entries
+      tags: [configuration]
+      responses:
+        '200':
+          description: Entries returned
+  /api/v1/entries/{config_key}:
+    put:
+      summary: Create or update a configuration entry
+      tags: [configuration]
+      parameters:
+        - name: config_key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Entry created or updated
+    get:
+      summary: Get a configuration entry
+      tags: [configuration]
+      parameters:
+        - name: config_key
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Entry returned
+        '404':
+          description: Not found
+  /api/v1/all:
+    get:
+      summary: Aggregate snapshot of flags and entries for service bootstrap
+      tags: [configuration]
+      responses:
+        '200':
+          description: Snapshot returned

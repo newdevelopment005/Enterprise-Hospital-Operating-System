@@ -1,0 +1,58 @@
+# qdrant.yaml — vector database for the RAG knowledge plane (ai-service, knowledge-service).
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: qdrant, app.kubernetes.io/part-of: ehos }
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: qdrant }
+  ports:
+    - { name: grpc, port: 6333 }
+    - { name: http, port: 6334 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: qdrant, app.kubernetes.io/part-of: ehos }
+spec:
+  serviceName: qdrant
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: qdrant } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: qdrant, app.kubernetes.io/part-of: ehos }
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.10.1
+          ports:
+            - { name: grpc, containerPort: 6333 }
+            - { name: http, containerPort: 6334 }
+          env:
+            - { name: QDRANT__SERVICE__API_KEY, valueFrom: { secretKeyRef: { name: qdrant-api-key, key: api-key, optional: true } } }
+          volumeMounts: [{ name: storage, mountPath: /qdrant/storage }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 6333 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: 4, memory: 8Gi }
+  volumeClaimTemplates:
+    - metadata: { name: storage }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: ehos-fast
+        resources: { requests: { storage: 50Gi } }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: qdrant-api-key
+  namespace: ehos-ai
+type: Opaque
+stringData:
+  api-key: "change-me-qdrant"

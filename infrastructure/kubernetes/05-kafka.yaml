@@ -1,0 +1,79 @@
+# kafka.yaml — Kafka KRaft event bus, 3 brokers on the data plane.
+# Uses the Apache distribution image (KRaft mode, combined broker+controller).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: ehos-data
+  labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: ehos }
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: kafka }
+  ports:
+    - { name: internal, port: 9092 }
+    - { name: controller, port: 9093 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: ehos-data
+  labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: ehos }
+spec:
+  serviceName: kafka
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector: { matchLabels: { app.kubernetes.io/name: kafka } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: ehos }
+    spec:
+      containers:
+        - name: kafka
+          image: apache/kafka:3.7.0
+          ports:
+            - { name: internal, containerPort: 9092 }
+            - { name: controller, containerPort: 9093 }
+          env:
+            - { name: KAFKA_NODE_ID, value: "0" }
+            - { name: KAFKA_BROKER_ID, value: "0" }
+            - { name: KAFKA_PROCESS_ROLES, value: broker,controller }
+            - { name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "0@kafka-0.kafka:9093,1@kafka-1.kafka:9093,2@kafka-2.kafka:9093" }
+            - { name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://:9093" }
+            - { name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka-$(POD_NAME).kafka:9092" }
+            - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT" }
+            - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER }
+            - { name: KAFKA_INTER_BROKER_LISTENER_NAME, value: PLAINTEXT }
+            - { name: KAFKA_CLUSTER_ID, valueFrom: { secretKeyRef: { name: kafka-cluster-id, key: cluster-id, optional: true } } }
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/kafka/data }
+            - { name: logs, mountPath: /opt/kafka/logs }
+          readinessProbe:
+            exec: { command: ["sh", "-c", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"] }
+            periodSeconds: 10
+            timeoutSeconds: 10
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: 4, memory: 6Gi }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: ehos-fast
+        resources: { requests: { storage: 100Gi } }
+    - metadata: { name: logs }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: ehos-fast
+        resources: { requests: { storage: 10Gi } }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kafka-cluster-id
+  namespace: ehos-data
+type: Opaque
+stringData:
+  cluster-id: "ehos-$(openssl rand -hex 12)"

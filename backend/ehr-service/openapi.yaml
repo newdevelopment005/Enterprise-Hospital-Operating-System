@@ -1,0 +1,1991 @@
+openapi: 3.1.0
+info:
+  title: EHOS EHR Service
+  version: 0.1.0
+paths:
+  /api/v1/patients/{patient_id}/encounters:
+    post:
+      tags:
+      - ehr
+      summary: Create Encounter
+      operationId: create_encounter_api_v1_patients__patient_id__encounters_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Encounters
+      operationId: list_encounters_api_v1_patients__patient_id__encounters_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/encounters/{encounter_id}/close:
+    post:
+      tags:
+      - ehr
+      summary: Close Encounter
+      operationId: close_encounter_api_v1_patients__patient_id__encounters__encounter_id__close_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: encounter_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Encounter Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/notes:
+    post:
+      tags:
+      - ehr
+      summary: Create Note
+      operationId: create_note_api_v1_patients__patient_id__notes_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Notes
+      operationId: list_notes_api_v1_patients__patient_id__notes_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: note_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note Type
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/notes/{note_id}:
+    get:
+      tags:
+      - ehr
+      summary: Get Note
+      operationId: get_note_api_v1_patients__patient_id__notes__note_id__get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Note Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - ehr
+      summary: Update Note
+      operationId: update_note_api_v1_patients__patient_id__notes__note_id__patch
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Note Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/notes/{note_id}/amend:
+    post:
+      tags:
+      - ehr
+      summary: Amend Note
+      operationId: amend_note_api_v1_patients__patient_id__notes__note_id__amend_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Note Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AmendmentIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/notes/{note_id}/sign:
+    post:
+      tags:
+      - ehr
+      summary: Sign Note
+      operationId: sign_note_api_v1_patients__patient_id__notes__note_id__sign_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Note Id
+      - name: signed_by
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Signed By
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/notes/{note_id}/versions:
+    get:
+      tags:
+      - ehr
+      summary: List Versions
+      operationId: list_versions_api_v1_patients__patient_id__notes__note_id__versions_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Note Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/notes/{note_id}/amendments:
+    get:
+      tags:
+      - ehr
+      summary: List Amendments
+      operationId: list_amendments_api_v1_patients__patient_id__notes__note_id__amendments_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: note_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Note Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/soap:
+    post:
+      tags:
+      - ehr
+      summary: Create Soap
+      operationId: create_soap_api_v1_patients__patient_id__soap_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOAPNoteIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/progress-notes:
+    post:
+      tags:
+      - ehr
+      summary: Create Progress
+      operationId: create_progress_api_v1_patients__patient_id__progress_notes_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgressNoteIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/discharge-summary:
+    post:
+      tags:
+      - ehr
+      summary: Create Discharge
+      operationId: create_discharge_api_v1_patients__patient_id__discharge_summary_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DischargeSummaryIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/vitals:
+    post:
+      tags:
+      - ehr
+      summary: Record Vitals
+      operationId: record_vitals_api_v1_patients__patient_id__vitals_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Vitals
+      operationId: list_vitals_api_v1_patients__patient_id__vitals_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: vital_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Vital Type
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/diagnoses:
+    post:
+      tags:
+      - ehr
+      summary: Add Diagnosis
+      operationId: add_diagnosis_api_v1_patients__patient_id__diagnoses_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosisIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Diagnoses
+      operationId: list_diagnoses_api_v1_patients__patient_id__diagnoses_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/diagnoses/{diagnosis_id}/resolve:
+    post:
+      tags:
+      - ehr
+      summary: Resolve Diagnosis
+      operationId: resolve_diagnosis_api_v1_patients__patient_id__diagnoses__diagnosis_id__resolve_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: diagnosis_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Diagnosis Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosisResolveIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/medications:
+    post:
+      tags:
+      - ehr
+      summary: Add Medication
+      operationId: add_medication_api_v1_patients__patient_id__medications_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicationIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Medications
+      operationId: list_medications_api_v1_patients__patient_id__medications_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/medications/{medication_id}:
+    patch:
+      tags:
+      - ehr
+      summary: Update Medication
+      operationId: update_medication_api_v1_patients__patient_id__medications__medication_id__patch
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: medication_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Medication Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicationUpdateIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/orders:
+    post:
+      tags:
+      - ehr
+      summary: Add Order
+      operationId: add_order_api_v1_patients__patient_id__orders_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClinicalOrderIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Orders
+      operationId: list_orders_api_v1_patients__patient_id__orders_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: order_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Order Type
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/orders/{order_id}:
+    patch:
+      tags:
+      - ehr
+      summary: Update Order
+      operationId: update_order_api_v1_patients__patient_id__orders__order_id__patch
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClinicalOrderUpdateIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/allergies:
+    post:
+      tags:
+      - ehr
+      summary: Add Allergy
+      operationId: add_allergy_api_v1_patients__patient_id__allergies_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllergyIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Allergies
+      operationId: list_allergies_api_v1_patients__patient_id__allergies_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/allergies/{allergy_id}/resolve:
+    post:
+      tags:
+      - ehr
+      summary: Resolve Allergy
+      operationId: resolve_allergy_api_v1_patients__patient_id__allergies__allergy_id__resolve_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: allergy_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Allergy Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/problems:
+    post:
+      tags:
+      - ehr
+      summary: Add Problem
+      operationId: add_problem_api_v1_patients__patient_id__problems_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProblemIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Problems
+      operationId: list_problems_api_v1_patients__patient_id__problems_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/problems/{problem_id}/resolve:
+    post:
+      tags:
+      - ehr
+      summary: Resolve Problem
+      operationId: resolve_problem_api_v1_patients__patient_id__problems__problem_id__resolve_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: problem_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Problem Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/medical-history:
+    post:
+      tags:
+      - ehr
+      summary: Add Medical History
+      operationId: add_medical_history_api_v1_patients__patient_id__medical_history_post
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MedicalHistoryIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ehr
+      summary: List Medical History
+      operationId: list_medical_history_api_v1_patients__patient_id__medical_history_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: history_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: History Type
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/timeline:
+    get:
+      tags:
+      - ehr
+      summary: Get Timeline
+      operationId: get_timeline_api_v1_patients__patient_id__timeline_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 1000
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/patients/{patient_id}/chart:
+    get:
+      tags:
+      - ehr
+      summary: Get Chart
+      operationId: get_chart_api_v1_patients__patient_id__chart_get
+      parameters:
+      - name: patient_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Patient Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AllergyIn:
+      properties:
+        allergen:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Allergen
+        allergen_type:
+          type: string
+          pattern: ^(DRUG|FOOD|ENVIRONMENT|OTHER)$
+          title: Allergen Type
+        reaction:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Reaction
+        severity:
+          type: string
+          pattern: ^(LOW|MEDIUM|HIGH|UNKNOWN)$
+          title: Severity
+          default: UNKNOWN
+        onset_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Onset Date
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+        recorded_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Recorded By
+      type: object
+      required:
+      - allergen
+      - allergen_type
+      title: AllergyIn
+    AmendmentIn:
+      properties:
+        amendment:
+          type: string
+          maxLength: 20000
+          minLength: 1
+          title: Amendment
+        author_id:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Author Id
+      type: object
+      required:
+      - amendment
+      title: AmendmentIn
+    ClinicalOrderIn:
+      properties:
+        order_type:
+          type: string
+          pattern: ^(LAB|IMAGING|PROCEDURE|CONSULT|NURSING|DIET|BLOOD|OTHER)$
+          title: Order Type
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Description
+        priority:
+          type: string
+          pattern: ^(ROUTINE|URGENT|STAT|ASAP)$
+          title: Priority
+          default: ROUTINE
+        indications:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Indications
+        requested_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Requested By
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+        external_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Ref
+      type: object
+      required:
+      - order_type
+      - description
+      title: ClinicalOrderIn
+    ClinicalOrderUpdateIn:
+      properties:
+        status:
+          anyOf:
+          - type: string
+            pattern: ^(REQUESTED|IN_PROGRESS|COMPLETED|CANCELLED|HOLD)$
+          - type: 'null'
+          title: Status
+        result_summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Result Summary
+        completed_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Completed By
+      type: object
+      title: ClinicalOrderUpdateIn
+    DiagnosisIn:
+      properties:
+        diagnosis_code:
+          type: string
+          maxLength: 50
+          minLength: 1
+          title: Diagnosis Code
+        code_system:
+          type: string
+          pattern: ^(ICD-10|ICD-11|SNOMED-CT)$
+          title: Code System
+          default: ICD-10
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Description
+        type:
+          type: string
+          pattern: ^(WORKING|PROVISIONAL|FINAL|ADMISSION|DISCHARGE|DEATH)$
+          title: Type
+          default: WORKING
+        encounter_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Encounter Id
+        onset_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Onset Date
+        diagnosed_by:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Diagnosed By
+        present_on_admission:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Present On Admission
+      type: object
+      required:
+      - diagnosis_code
+      - description
+      - encounter_id
+      - diagnosed_by
+      title: DiagnosisIn
+    DiagnosisResolveIn:
+      properties:
+        resolved_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Resolved By
+        resolved_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Resolved At
+      type: object
+      title: DiagnosisResolveIn
+    DischargeSummaryIn:
+      properties:
+        admission_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Admission Date
+        discharge_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Discharge Date
+        admitting_diagnosis:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Admitting Diagnosis
+        discharge_diagnosis:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Discharge Diagnosis
+        summary:
+          type: string
+          maxLength: 100000
+          minLength: 1
+          title: Summary
+        discharge_condition:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Discharge Condition
+        medications_on_discharge:
+          anyOf:
+          - type: string
+            maxLength: 10000
+          - type: 'null'
+          title: Medications On Discharge
+        follow_up_plan:
+          anyOf:
+          - type: string
+            maxLength: 10000
+          - type: 'null'
+          title: Follow Up Plan
+        patient_instructions:
+          anyOf:
+          - type: string
+            maxLength: 10000
+          - type: 'null'
+          title: Patient Instructions
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+        author_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Author Id
+        author_role:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Author Role
+      type: object
+      required:
+      - summary
+      - author_id
+      title: DischargeSummaryIn
+    EncounterIn:
+      properties:
+        encounter_type:
+          type: string
+          pattern: ^(OUTPATIENT|INPATIENT|ED|SURGERY|TELEHEALTH|HOME)$
+          title: Encounter Type
+        department_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department Id
+        provider_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Provider Id
+        start_time:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Start Time
+        end_time:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: End Time
+        visit_number:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Visit Number
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - encounter_type
+      title: EncounterIn
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    MedicalHistoryIn:
+      properties:
+        history_type:
+          type: string
+          pattern: ^(PAST_MEDICAL|SURGICAL|FAMILY|SOCIAL|MEDICATION|ALLERGY|OBSTETRIC|GROWTH|IMMUNIZATION|OTHER)$
+          title: History Type
+        description:
+          type: string
+          maxLength: 5000
+          minLength: 1
+          title: Description
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+        occurred_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Occurred Date
+        resolved_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Resolved Date
+        facility:
+          anyOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+          title: Facility
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 5000
+          - type: 'null'
+          title: Notes
+        recorded_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Recorded By
+      type: object
+      required:
+      - history_type
+      - description
+      title: MedicalHistoryIn
+    MedicationIn:
+      properties:
+        medication_name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Medication Name
+        medication_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Medication Id
+        strength:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Strength
+        dose:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Dose
+        dose_unit:
+          anyOf:
+          - type: string
+            maxLength: 20
+          - type: 'null'
+          title: Dose Unit
+        route:
+          type: string
+          pattern: ^(ORAL|IV|IM|SC|TOPICAL|INHALED|RECTAL|SUBLINGUAL|OTIC|OPHTHALMIC|NASAL|OTHER)$
+          title: Route
+          default: ORAL
+        frequency:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Frequency
+        duration:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Duration
+        prn:
+          type: boolean
+          title: Prn
+          default: false
+        start_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start Date
+        end_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End Date
+        indication:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Indication
+        instructions:
+          anyOf:
+          - type: string
+            maxLength: 5000
+          - type: 'null'
+          title: Instructions
+        prescriber_id:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Prescriber Id
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+      type: object
+      required:
+      - medication_name
+      title: MedicationIn
+    MedicationUpdateIn:
+      properties:
+        status:
+          anyOf:
+          - type: string
+            pattern: ^(PLANNED|ACTIVE|COMPLETED|DISCONTINUED|HOLD|CANCELLED)$
+          - type: 'null'
+          title: Status
+        instructions:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Instructions
+        discontinued_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Discontinued By
+        distribution_forbid:
+          type: boolean
+          title: Distribution Forbid
+          default: false
+      type: object
+      title: MedicationUpdateIn
+    NoteIn:
+      properties:
+        note_type:
+          type: string
+          pattern: ^(SOAP|PROGRESS|ADMISSION|DISCHARGE|CONSULT|NURSING|OPNOTE|AI_DRAFT)$
+          title: Note Type
+        content:
+          type: string
+          maxLength: 100000
+          minLength: 1
+          title: Content
+        content_struct:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Content Struct
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+        author_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Author Id
+        author_role:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Author Role
+        source:
+          anyOf:
+          - type: string
+            pattern: ^(MANUAL|AI_DRAFT|VOICE|IMPORTED)$
+          - type: 'null'
+          title: Source
+        change_reason:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Change Reason
+      type: object
+      required:
+      - note_type
+      - content
+      - author_id
+      title: NoteIn
+    ProblemIn:
+      properties:
+        problem:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Problem
+        diagnosis_code:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Diagnosis Code
+        code_system:
+          type: string
+          pattern: ^(ICD-10|ICD-11|SNOMED-CT)$
+          title: Code System
+          default: ICD-10
+        onset_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Onset Date
+        severity:
+          anyOf:
+          - type: string
+            pattern: ^(LOW|MEDIUM|HIGH)$
+          - type: 'null'
+          title: Severity
+        note:
+          anyOf:
+          - type: string
+            maxLength: 5000
+          - type: 'null'
+          title: Note
+        recorded_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Recorded By
+      type: object
+      required:
+      - problem
+      title: ProblemIn
+    ProgressNoteIn:
+      properties:
+        content:
+          type: string
+          maxLength: 100000
+          minLength: 1
+          title: Content
+        progress_note:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Progress Note
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+        author_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Author Id
+        author_role:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Author Role
+        change_reason:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Change Reason
+      type: object
+      required:
+      - content
+      - author_id
+      title: ProgressNoteIn
+    SOAPNoteIn:
+      properties:
+        subjective:
+          type: string
+          maxLength: 40000
+          title: Subjective
+          default: ''
+        objective:
+          type: string
+          maxLength: 40000
+          title: Objective
+          default: ''
+        assessment:
+          type: string
+          maxLength: 40000
+          title: Assessment
+          default: ''
+        plan:
+          type: string
+          maxLength: 40000
+          title: Plan
+          default: ''
+        encounter_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Encounter Id
+        author_id:
+          type: string
+          maxLength: 36
+          minLength: 1
+          title: Author Id
+        author_role:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Author Role
+        source:
+          anyOf:
+          - type: string
+            pattern: ^(MANUAL|AI_DRAFT|VOICE|IMPORTED)$
+          - type: 'null'
+          title: Source
+      type: object
+      required:
+      - author_id
+      title: SOAPNoteIn
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

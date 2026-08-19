@@ -1,0 +1,86 @@
+# values-prod.yaml — hospital production overrides. Merge over values.yaml:
+#   helm template ehos-platform ./infrastructure/helm/ehos-platform \
+#     -f infrastructure/helm/ehos-platform/values.yaml \
+#     -f infrastructure/helm/ehos-platform/values-prod.yaml
+global:
+  imageTag: "0.3.0"
+  imagePullSecrets: [ehos-registry]
+
+postgresql:
+  enabled: true
+  auth:
+    existingSecret: ehos-postgres
+  primary:
+    persistence: { size: 200Gi }
+
+redis:
+  enabled: true
+  auth: { existingSecret: ehos-redis, existingSecretPasswordKey: REDIS_PASSWORD }
+  replica: { replicaCount: 2, persistence: { size: 20Gi } }
+
+kafka:
+  enabled: true
+  replicaCount: 3
+  listeners:
+    client: { protocol: SASL_PLAINTEXT }
+  sasl:
+    client: { users: [{ name: ehos-app, secretRef: { name: ehos-kafka-sasl } }] }
+
+minio:
+  enabled: true
+  replicas: 4
+  persistence: { size: 200Gi }
+  existingSecret: ehos-minio
+
+qdrant:
+  enabled: true
+  existingSecret: qdrant-api-key
+  persistence: { size: 50Gi }
+
+keycloak:
+  enabled: true
+  auth:
+    existingSecret: ehos-keycloak
+  podAnnotations:
+    reloader.stakater.com/auto: "true"
+
+ingress-nginx:
+  enabled: true
+  controller:
+    replicaCount: 2
+    service: { type: LoadBalancer }
+
+cert-manager:
+  enabled: true
+
+kube-prometheus-stack:
+  enabled: true
+  prometheus:
+    prometheusSpec:
+      retention: 30d
+      storageSpec:
+        volumeClaimTemplate:
+          spec: { accessModes: [ReadWriteOnce], resources: { requests: { storage: 50Gi } } }
+  grafana:
+    persistence: { enabled: true, size: 5Gi }
+    adminPassword: "CHANGE_ME"
+    dashboards: { markdown: null }
+  alertmanager:
+    enabled: true
+
+ingress:
+  enabled: true
+  className: nginx
+  tls:
+    - secretName: ehos-tls
+      hosts: [hospital.example.org]
+
+# Lock HPA ranges tighter in production.
+services:
+  api-gateway:
+    replicas: 3
+    hpa: { min: 3, max: 12, cpu: 70 }
+  prediction-service: { replicas: 2 }
+  ai-service: { replicas: 2 }
+
+networkPolicies: true

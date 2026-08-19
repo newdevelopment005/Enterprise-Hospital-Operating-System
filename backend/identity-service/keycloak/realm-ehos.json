@@ -1,0 +1,91 @@
+{
+  "realm": "ehos",
+  "enabled": true,
+  "displayName": "EHOS",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "verifyEmail": false,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 28800,
+  "defaultSignatureAlgorithm": "RS256",
+  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1) and notUsername",
+
+  "roles": {
+    "realm": [
+      { "name": "administrator", "description": "System administrators", "composite": false },
+      { "name": "doctor", "description": "Clinical staff", "composite": false },
+      { "name": "nurse", "description": "Nursing staff", "composite": false },
+      { "name": "pharmacist", "description": "Pharmacy staff", "composite": false },
+      { "name": "finance", "description": "Finance staff", "composite": false },
+      { "name": "auditor", "description": "Read-only auditors", "composite": false },
+      { "name": "default-roles-ehos", "description": "Default member role", "composite": true }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "ehos-api",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${EHOS_CLIENT_SECRET}",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "redirectUris": ["http://localhost:8000/*", "http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:8000", "http://localhost:5173"],
+      "defaultClientScopes": ["profile", "email", "roles"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8000/*"
+      }
+    },
+    {
+      "clientId": "admin-cli",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@ehos.example",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "${EHOS_BOOTSTRAP_ADMIN_PASSWORD}", "temporary": false }],
+      "realmRoles": ["administrator", "default-roles-ehos"]
+    }
+  ],
+
+  "clientScopeMappings": {
+    "ehos-api": [
+      { "client": "ehos-api", "roles": ["administrator", "doctor", "nurse", "pharmacist", "finance", "auditor"] }
+    ]
+  },
+
+  "authenticationFlows": [
+    {
+      "alias": "browser",
+      "description": "Browser based authentication with MFA support",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": true,
+      "authenticationExecutions": [
+        { "authenticator": "auth-cookie", "requirement": "ALTERNATIVE", "priority": 10, "userSetupAllowed": false, "autheticatorFlow": false },
+        { "authenticator": "auth-username-password-form", "requirement": "REQUIRED", "priority": 20, "userSetupAllowed": false, "autheticatorFlow": false },
+        { "authenticator": "auth-otp-form", "requirement": "CONDITIONAL", "priority": 30, "userSetupAllowed": true, "autheticatorFlow": false }
+      ]
+    }
+  ],
+
+  "defaultLocale": "en",
+  "internationalizationEnabled": true
+}

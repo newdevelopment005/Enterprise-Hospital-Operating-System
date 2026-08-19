@@ -1,0 +1,60 @@
+# 12-haproxy.yaml — HAProxy edge load balancer in front of the NGINX ingress.
+# For true HA pair + VIP run the keepalived sidecar (hostNetwork) or a HW LB;
+# the TCP service exposes 80/443 to the LAN.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy
+  namespace: ehos-monitoring
+data:
+  haproxy.cfg: |
+    global
+      maxconn 50000
+      log stdout format raw local0
+    defaults
+      log global
+      mode tcp
+      timeout connect 5s
+      timeout client 300s
+      timeout server 300s
+    frontend tcp-in
+      bind *:80
+      mode http
+      http-request redirect scheme https unless { ssl_fc }
+    frontend tls-in
+      bind *:443
+      mode tcp
+      default_backend ingress
+    backend ingress
+      mode tcp
+      balance roundrobin
+      option httpchk GET /healthz
+      server ingress-1 ingress-nginx-controller.ehos-monitoring.svc:443 check inter 5s fall 3 rise 2
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: haproxy
+  namespace: ehos-monitoring
+  labels: { app.kubernetes.io/name: haproxy }
+spec:
+  selector: { matchLabels: { app.kubernetes.io/name: haproxy } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: haproxy, app.kubernetes.io/part-of: ehos } }
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: haproxy
+          image: haproxy:2.9-alpine
+          ports:
+            - { name: http, containerPort: 80, hostPort: 80 }
+            - { name: tls, containerPort: 443, hostPort: 443 }
+          volumeMounts:
+            - { name: cfg, mountPath: /usr/local/etc/haproxy, readOnly: true }
+          livenessProbe:
+            httpGet: { path: /healthz, port: 80 }
+            periodSeconds: 20
+      volumes:
+        - name: cfg
+          configMap: { name: haproxy }

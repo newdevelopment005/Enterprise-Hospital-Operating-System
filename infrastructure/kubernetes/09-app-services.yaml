@@ -1,0 +1,397 @@
+# app-services.yaml — EHOS platform, clinical and AI backend Deployments.
+# Every service: Deployment + Service + HPA. Image from REGISTRY (see CI/CD).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: api-gateway, app.kubernetes.io/part-of: ehos }
+spec:
+  replicas: 3
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app.kubernetes.io/name: api-gateway } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: api-gateway, app.kubernetes.io/part-of: ehos }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: api-gateway
+          image: ${REGISTRY}/api-gateway:${TAG}
+          ports: [{ name: http, containerPort: 8000 }]
+          env:
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: kafka.ehos-data.svc:9092 }
+            - { name: REDIS_HOST, value: redis.ehos-data.svc }
+            - { name: KEYCLOAK_URL, value: http://keycloak.ehos-platform.svc:8080 }
+            - { name: KEYCLOAK_REALM, value: ehos }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: 2, memory: 2Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: api-gateway }
+spec:
+  selector: { app.kubernetes.io/name: api-gateway }
+  ports: [{ name: http, port: 8000 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway
+  namespace: ehos-platform
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api-gateway }
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+# --- configuration-service (ehos-platform) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: configuration-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: configuration-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: configuration-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: configuration-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: configuration-service
+          image: ${REGISTRY}/configuration-service:${TAG}
+          ports: [{ name: http, containerPort: 8100 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: REDIS_HOST, value: redis.ehos-data.svc }
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: kafka.ehos-data.svc:9092 }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8100 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 1, memory: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: configuration-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: configuration-service }
+spec:
+  selector: { app.kubernetes.io/name: configuration-service }
+  ports: [{ name: http, port: 8100 }]
+---
+# --- audit-service (ehos-platform) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: audit-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: audit-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: audit-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: audit-service
+          image: ${REGISTRY}/audit-service:${TAG}
+          ports: [{ name: http, containerPort: 8200 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: kafka.ehos-data.svc:9092 }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8200 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 1, memory: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: audit-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: audit-service }
+spec:
+  selector: { app.kubernetes.io/name: audit-service }
+  ports: [{ name: http, port: 8200 }]
+---
+# --- notification-service (ehos-platform) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: notification-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: notification-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: notification-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: notification-service
+          image: ${REGISTRY}/notification-service:${TAG}
+          ports: [{ name: http, containerPort: 8300 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: kafka.ehos-data.svc:9092 }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8300 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 1, memory: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: notification-service }
+spec:
+  selector: { app.kubernetes.io/name: notification-service }
+  ports: [{ name: http, port: 8300 }]
+---
+# --- authentication-service (ehos-platform) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentication-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: authentication-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: authentication-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: authentication-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: authentication-service
+          image: ${REGISTRY}/authentication-service:${TAG}
+          ports: [{ name: http, containerPort: 8500 }]
+          env:
+            - { name: KEYCLOAK_URL, value: http://keycloak.ehos-platform.svc:8080 }
+            - { name: KEYCLOAK_REALM, value: ehos }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8500 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 100m, memory: 256Mi }, limits: { cpu: 1, memory: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentication-service
+  namespace: ehos-platform
+  labels: { app.kubernetes.io/name: authentication-service }
+spec:
+  selector: { app.kubernetes.io/name: authentication-service }
+  ports: [{ name: http, port: 8500 }]
+---
+# --- patient-service (ehos-clinical) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: patient-service
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: patient-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: patient-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: patient-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: patient-service
+          image: ${REGISTRY}/patient-service:${TAG}
+          ports: [{ name: http, containerPort: 8501 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: kafka.ehos-data.svc:9092 }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8501 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 100m, memory: 512Mi }, limits: { cpu: 2, memory: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: patient-service
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: patient-service }
+spec:
+  selector: { app.kubernetes.io/name: patient-service }
+  ports: [{ name: http, port: 8501 }]
+---
+# --- ehr-service (ehos-clinical) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ehr-service
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: ehr-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: ehr-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: ehr-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: ehr-service
+          image: ${REGISTRY}/ehr-service:${TAG}
+          ports: [{ name: http, containerPort: 8502 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: kafka.ehos-data.svc:9092 }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8502 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: 2, memory: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ehr-service
+  namespace: ehos-clinical
+  labels: { app.kubernetes.io/name: ehr-service }
+spec:
+  selector: { app.kubernetes.io/name: ehr-service }
+  ports: [{ name: http, port: 8502 }]
+---
+# --- knowledge-service (ehos-ai) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledge-service
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: knowledge-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: knowledge-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: knowledge-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: knowledge-service
+          image: ${REGISTRY}/knowledge-service:${TAG}
+          ports: [{ name: http, containerPort: 8505 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: QDRANT_URL, value: http://qdrant.ehos-ai.svc:6333 }
+            - { name: MINIO_ENDPOINT, value: http://minio.ehos-data.svc:9000 }
+            - { name: MINIO_ROOT_USER, valueFrom: { secretKeyRef: { name: ehos-minio, key: MINIO_ROOT_USER } } }
+            - { name: MINIO_ROOT_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-minio, key: MINIO_ROOT_PASSWORD } } }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8505 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: 2, memory: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: knowledge-service
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: knowledge-service }
+spec:
+  selector: { app.kubernetes.io/name: knowledge-service }
+  ports: [{ name: http, port: 8505 }]
+---
+# --- ai-service (ehos-ai) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: ai-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: ai-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: ai-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: ai-service
+          image: ${REGISTRY}/ai-service:${TAG}
+          ports: [{ name: http, containerPort: 8506 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: AI_INFERENCE_ADAPTER, value: vllm }
+            - { name: AI_INFERENCE_URL, value: http://inference.ehos-ai.svc:8001 }
+            - { name: AI_KNOWLEDGE_SERVICE_URL, value: http://knowledge-service.ehos-ai.svc:8505 }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8506 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: 2, memory: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: ai-service }
+spec:
+  selector: { app.kubernetes.io/name: ai-service }
+  ports: [{ name: http, port: 8506 }]
+---
+# --- prediction-service (ehos-ai) ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-service
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: prediction-service }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app.kubernetes.io/name: prediction-service } }
+  template:
+    metadata: { labels: { app.kubernetes.io/name: prediction-service, app.kubernetes.io/part-of: ehos } }
+    spec:
+      imagePullSecrets: [{ name: ehos-registry }]
+      containers:
+        - name: prediction-service
+          image: ${REGISTRY}/prediction-service:${TAG}
+          ports: [{ name: http, containerPort: 8507 }]
+          env:
+            - { name: POSTGRES_HOST, value: postgres.ehos-data.svc }
+            - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+            - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+            - { name: KAFKA_BOOTSTRAP_SERVERS, value: kafka.ehos-data.svc:9092 }
+            - { name: PREDICTION_DEFAULT_ADAPTER, value: seasonal_naive }
+            - { name: EHOS_ENV, value: production }
+          readinessProbe: { httpGet: { path: /health, port: 8507 }, periodSeconds: 10 }
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { cpu: 2, memory: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prediction-service
+  namespace: ehos-ai
+  labels: { app.kubernetes.io/name: prediction-service }
+spec:
+  selector: { app.kubernetes.io/name: prediction-service }
+  ports: [{ name: http, port: 8507 }]
+
+# NOTE: ${REGISTRY} / ${TAG} are envsubst placeholders filled by CI/CD or helm;
+#  apply via: envsubst < 09-app-services.yaml | kubectl apply -f -

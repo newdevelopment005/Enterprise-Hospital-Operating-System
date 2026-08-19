@@ -1,0 +1,434 @@
+openapi: 3.1.0
+info:
+  title: EHOS Knowledge Service (HospitalGPT RAG)
+  version: 0.1.0
+paths:
+  /api/v1/knowledge/documents:
+    post:
+      tags:
+      - knowledge
+      summary: Upsert Document
+      operationId: upsert_document_api_v1_knowledge_documents_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - knowledge
+      summary: List Documents
+      operationId: list_documents_api_v1_knowledge_documents_get
+      parameters:
+      - name: doc_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Doc Type
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 200
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/knowledge/documents/{document_id}:
+    get:
+      tags:
+      - knowledge
+      summary: Get Document
+      operationId: get_document_api_v1_knowledge_documents__document_id__get
+      parameters:
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - knowledge
+      summary: Remove Document
+      operationId: remove_document_api_v1_knowledge_documents__document_id__delete
+      parameters:
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+          default: removed
+          title: Reason
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/knowledge/documents/{document_id}/status:
+    patch:
+      tags:
+      - knowledge
+      summary: Set Document Status
+      operationId: set_document_status_api_v1_knowledge_documents__document_id__status_patch
+      parameters:
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentStatusIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/knowledge/documents/{document_id}/chunks:
+    get:
+      tags:
+      - knowledge
+      summary: List Chunks
+      operationId: list_chunks_api_v1_knowledge_documents__document_id__chunks_get
+      parameters:
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Document Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/knowledge/ingest:
+    post:
+      tags:
+      - knowledge
+      summary: Ingest Upload
+      operationId: ingest_upload_api_v1_knowledge_ingest_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_ingest_upload_api_v1_knowledge_ingest_post'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/knowledge/search:
+    post:
+      tags:
+      - knowledge
+      summary: Search
+      operationId: search_api_v1_knowledge_search_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/knowledge/embed:
+    post:
+      tags:
+      - knowledge
+      summary: Embed Text
+      operationId: embed_text_api_v1_knowledge_embed_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbedIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/knowledge/corpora:
+    get:
+      tags:
+      - knowledge
+      summary: List Corpora
+      operationId: list_corpora_api_v1_knowledge_corpora_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/v1/knowledge/seed-defaults:
+    post:
+      tags:
+      - knowledge
+      summary: Seed Defaults
+      operationId: seed_defaults_api_v1_knowledge_seed_defaults_post
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    Body_ingest_upload_api_v1_knowledge_ingest_post:
+      properties:
+        file:
+          type: string
+          format: binary
+          title: File
+        doc_type:
+          type: string
+          title: Doc Type
+        kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Kind
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        auto_approve:
+          type: boolean
+          title: Auto Approve
+          default: true
+      type: object
+      required:
+      - file
+      - doc_type
+      title: Body_ingest_upload_api_v1_knowledge_ingest_post
+    DocumentIn:
+      properties:
+        doc_type:
+          type: string
+          pattern: ^(GUIDELINE|POLICY|PROTOCOL|FORMULARY|TEXTBOOK|REGULATORY|PATIENT_ED|MEDICATION|LAB_REFERENCE|JOURNAL)$
+          title: Doc Type
+        title:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Title
+        content:
+          type: string
+          maxLength: 500000
+          minLength: 1
+          title: Content
+        source_uri:
+          anyOf:
+          - type: string
+            maxLength: 4000
+          - type: 'null'
+          title: Source Uri
+        approved_by:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: Approved By
+        version:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Version
+      type: object
+      required:
+      - doc_type
+      - title
+      - content
+      title: DocumentIn
+    DocumentStatusIn:
+      properties:
+        status:
+          type: string
+          pattern: ^(PENDING|INDEXED|APPROVED|SUPERSEDED|REJECTED|RETIRED)$
+          title: Status
+      type: object
+      required:
+      - status
+      title: DocumentStatusIn
+    EmbedIn:
+      properties:
+        text:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Text
+      type: object
+      required:
+      - text
+      title: EmbedIn
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    SearchIn:
+      properties:
+        query:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Query
+        doc_type:
+          anyOf:
+          - type: string
+            pattern: ^(GUIDELINE|POLICY|PROTOCOL|FORMULARY|TEXTBOOK|REGULATORY|PATIENT_ED|MEDICATION|LAB_REFERENCE|JOURNAL)$
+          - type: 'null'
+          title: Doc Type
+        corpus_key:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Corpus Key
+        top_k:
+          type: integer
+          maximum: 50.0
+          minimum: 1.0
+          title: Top K
+          default: 8
+        user_id:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: User Id
+      type: object
+      required:
+      - query
+      title: SearchIn
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

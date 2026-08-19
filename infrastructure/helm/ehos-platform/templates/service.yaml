@@ -1,0 +1,15 @@
+{{- range $name, $spec := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $spec.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: ehos
+spec:
+  selector: { app.kubernetes.io/name: {{ $name }} }
+  ports:
+    - { name: http, port: {{ $spec.port | int }}, targetPort: http }
+{{- end }}

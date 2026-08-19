@@ -1,0 +1,18 @@
+{{- if .Values.monitoring.servicemonitors }}
+{{- range $name, $spec := .Values.services }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}
+  namespace: {{ $spec.namespace }}
+  labels: { release: prometheus, app.kubernetes.io/part-of: ehos }
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: {{ $name }}, app.kubernetes.io/scrape: "true" }
+  endpoints:
+    - port: http
+      path: {{ $spec.probes.path }}
+      interval: 30s
+{{- end }}
+{{- end }}

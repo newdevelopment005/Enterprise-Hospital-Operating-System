@@ -1,0 +1,57 @@
+apiVersion: v2
+name: ehos-platform
+description: EHOS - Enterprise Hospital Operating System (umbrella deployment chart)
+type: application
+version: 0.3.0
+appVersion: "0.3.0"
+
+dependencies:
+  # Data plane
+  - name: postgresql
+    version: "15.x"
+    repository: https://charts.bitnami.com/bitnami
+    alias: postgresql
+    condition: postgresql.enabled
+  - name: redis
+    version: "19.x"
+    repository: https://charts.bitnami.com/bitnami
+    alias: redis
+    condition: redis.enabled
+  - name: kafka
+    version: "29.x"
+    repository: https://charts.bitnami.com/bitnami
+    alias: kafka
+    condition: kafka.enabled
+  - name: minio
+    version: "14.x"
+    repository: https://charts.min.io/
+    condition: minio.enabled
+  - name: qdrant
+    version: "0.1.x"
+    repository: https://qdrant.github.io/helm-charts
+    condition: qdrant.enabled
+
+  # Identity
+  - name: keycloak
+    version: "24.x"
+    repository: https://codecentric.github.io/helm-charts
+    condition: keycloak.enabled
+
+  # Edge & TLS
+  - name: ingress-nginx
+    version: "4.x"
+    repository: https://kubernetes.github.io/ingress-nginx
+    condition: ingress-nginx.enabled
+  - name: cert-manager
+    version: "1.x"
+    repository: https://charts.jetstack.io
+    condition: cert-manager.enabled
+
+  # Observability
+  - name: kube-prometheus-stack
+    version: "62.x"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: kube-prometheus-stack.enabled
+
+# The chart's own templates render the EHOS application services
+# (gateway, platform, clinical, ai) + ServiceMonitors via values.services.

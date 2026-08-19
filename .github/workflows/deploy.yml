@@ -1,0 +1,150 @@
+name: EHOS Deploy
+
+on:
+  push:
+    branches: [develop, main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_ORG: your-org
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  build:
+    name: Build & push images
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "tag=$(echo ${GITHUB_REF_NAME} | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend images
+        working-directory: .
+        run: |
+          for svc in api-gateway configuration-service audit-service \
+                     notification-service authentication-service \
+                     patient-service ehr-service knowledge-service \
+                     ai-service prediction-service; do
+            docker build -f backend/$svc/Dockerfile \
+              -t ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/$svc:${{ steps.tag.outputs.tag }} \
+              -t ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/$svc:latest .
+            docker push ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/$svc:${{ steps.tag.outputs.tag }}
+            docker push ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/$svc:latest
+          done
+
+      - name: Build & push frontend images
+        run: |
+          for app in ehr-portal patient-registration executive-dashboard ai-assistant; do
+            docker build --build-arg APP=$app \
+              -f infrastructure/docker/frontend-spa.Dockerfile \
+              -t ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/frontend-$app:${{ steps.tag.outputs.tag }} \
+              -t ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/frontend-$app:latest .
+            docker push ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/frontend-$app:${{ steps.tag.outputs.tag }}
+            docker push ${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }}/frontend-$app:latest
+          done
+
+  deploy-dev:
+    name: Deploy dev
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG_DEV }}" | base64 -d > $HOME/.kube/config
+
+      - name: Helm dependency build
+        run: helm dependency build infrastructure/helm/ehos-platform
+
+      - name: Deploy
+        run: |
+          helm upgrade --install ehos infrastructure/helm/ehos-platform \
+            --namespace ehos-platform --create-namespace --atomic --timeout 15m \
+            --set global.imageRegistry=${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }} \
+            --set global.imageTag=${{ needs.build.outputs.image_tag }} \
+            --set global.imagePullSecrets[0]=ghcr
+
+  deploy-staging:
+    name: Deploy staging
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+
+      - name: Helm dependency build
+        run: helm dependency build infrastructure/helm/ehos-platform
+
+      - name: Deploy with prod values
+        run: |
+          helm upgrade --install ehos infrastructure/helm/ehos-platform \
+            -f infrastructure/helm/ehos-platform/values.yaml \
+            -f infrastructure/helm/ehos-platform/values-prod.yaml \
+            --namespace ehos-platform --create-namespace --atomic --timeout 20m \
+            --set global.imageRegistry=${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }} \
+            --set global.imageTag=${{ needs.build.outputs.image_tag }}
+
+  deploy-prod:
+    name: Deploy production
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://hospital.example.org
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
+
+      - name: Helm dependency build
+        run: helm dependency build infrastructure/helm/ehos-platform
+
+      - name: Deploy
+        run: |
+          helm upgrade --install ehos infrastructure/helm/ehos-platform \
+            -f infrastructure/helm/ehos-platform/values.yaml \
+            -f infrastructure/helm/ehos-platform/values-prod.yaml \
+            --namespace ehos-platform --create-namespace --atomic --timeout 30m \
+            --set global.imageRegistry=${{ env.REGISTRY }}/${{ env.REGISTRY_ORG }} \
+            --set global.imageTag=${{ needs.build.outputs.image_tag }}
+
+      - name: Smoke test
+        run: |
+          kubectl rollout status -n ehos-platform deployment/api-gateway --timeout=10m
+          kubectl rollout status -n ehos-data statefulset/postgres --timeout=10m

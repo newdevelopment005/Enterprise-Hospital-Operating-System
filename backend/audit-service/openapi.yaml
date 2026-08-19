@@ -1,0 +1,66 @@
+openapi: 3.0.3
+info:
+  title: EHOS Audit Service
+  version: 0.1.0
+  description: Immutable, tamper-evident audit trail. Full OpenAPI schema is served live at /api/v1/openapi.json.
+servers:
+  - url: http://localhost:8200
+paths:
+  /api/v1/records:
+    post:
+      summary: Create an audit record (append-only)
+      tags: [audit]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_type, source]
+              properties:
+                event_type: { type: string }
+                actor_id: { type: string }
+                source: { type: string }
+                action: { type: string }
+                resource_type: { type: string }
+                resource_id: { type: string }
+      responses:
+        '201':
+          description: Record created
+    get:
+      summary: Search audit records
+      tags: [audit]
+      parameters:
+        - name: event_type
+          in: query
+          schema: { type: string }
+        - name: actor_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Records returned
+  /api/v1/records/{record_id}:
+    get:
+      summary: Get a single audit record
+      tags: [audit]
+      parameters:
+        - name: record_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Record returned
+        '404':
+          description: Not found
+  /api/v1/integrity:
+    get:
+      summary: Verify the append-only hash chain
+      tags: [audit]
+      responses:
+        '200':
+          description: Integrity status returned

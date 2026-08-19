@@ -1,0 +1,802 @@
+openapi: 3.1.0
+info:
+  title: EHOS AI Service (HospitalGPT)
+  version: 0.1.0
+paths:
+  /api/v1/ai/chat:
+    post:
+      tags:
+      - ai
+      summary: Chat
+      operationId: chat_api_v1_ai_chat_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/conversations:
+    post:
+      tags:
+      - ai
+      summary: Create Conversation
+      operationId: create_conversation_api_v1_ai_conversations_post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConversationIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - ai
+      summary: List Conversations
+      operationId: list_conversations_api_v1_ai_conversations_get
+      parameters:
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 100
+            minimum: 1
+          - type: 'null'
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/conversations/{conversation_id}/messages:
+    get:
+      tags:
+      - ai
+      summary: List Messages
+      operationId: list_messages_api_v1_ai_conversations__conversation_id__messages_get
+      parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Conversation Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/models:
+    get:
+      tags:
+      - ai
+      summary: List Models
+      operationId: list_models_api_v1_ai_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+    post:
+      tags:
+      - ai
+      summary: Register Model
+      operationId: register_model_api_v1_ai_models_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelRegisterIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/models/{model_key}/load:
+    post:
+      tags:
+      - ai
+      summary: Load Model
+      operationId: load_model_api_v1_ai_models__model_key__load_post
+      parameters:
+      - name: model_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/models/{model_key}/unload:
+    post:
+      tags:
+      - ai
+      summary: Unload Model
+      operationId: unload_model_api_v1_ai_models__model_key__unload_post
+      parameters:
+      - name: model_key
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Model Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/prompts:
+    get:
+      tags:
+      - ai
+      summary: List Prompts
+      operationId: list_prompts_api_v1_ai_prompts_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+    post:
+      tags:
+      - ai
+      summary: Create Prompt
+      operationId: create_prompt_api_v1_ai_prompts_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/memories:
+    get:
+      tags:
+      - ai
+      summary: List Memories
+      operationId: list_memories_api_v1_ai_memories_get
+      parameters:
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: memory_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Memory Type
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - ai
+      summary: Add Memory
+      operationId: add_memory_api_v1_ai_memories_put
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/memories/{memory_id}:
+    delete:
+      tags:
+      - ai
+      summary: Remove Memory
+      operationId: remove_memory_api_v1_ai_memories__memory_id__delete
+      parameters:
+      - name: memory_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Memory Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/requests/{request_id}/approve:
+    post:
+      tags:
+      - ai
+      summary: Approve Request
+      operationId: approve_request_api_v1_ai_requests__request_id__approve_post
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Request Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/requests/{request_id}:
+    get:
+      tags:
+      - ai
+      summary: Get Request
+      operationId: get_request_api_v1_ai_requests__request_id__get
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Request Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/feedback:
+    post:
+      tags:
+      - ai
+      summary: Add Feedback
+      operationId: add_feedback_api_v1_ai_feedback_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/stt:
+    post:
+      tags:
+      - ai
+      summary: Stt Transcribe
+      operationId: stt_transcribe_api_v1_ai_stt_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_stt_transcribe_api_v1_ai_stt_post'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/tts:
+    post:
+      tags:
+      - ai
+      summary: Tts Synthesize
+      operationId: tts_synthesize_api_v1_ai_tts_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TtsIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/ocr:
+    post:
+      tags:
+      - ai
+      summary: Ocr Extract
+      operationId: ocr_extract_api_v1_ai_ocr_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_ocr_extract_api_v1_ai_ocr_post'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ai/status:
+    get:
+      tags:
+      - ai
+      summary: Status
+      operationId: status_api_v1_ai_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+components:
+  schemas:
+    ApprovalDecisionIn:
+      properties:
+        approver_id:
+          type: string
+          minLength: 1
+          title: Approver Id
+        approved:
+          type: boolean
+          title: Approved
+        comments:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comments
+      type: object
+      required:
+      - approver_id
+      - approved
+      title: ApprovalDecisionIn
+    Body_ocr_extract_api_v1_ai_ocr_post:
+      properties:
+        image:
+          type: string
+          format: binary
+          title: Image
+      type: object
+      required:
+      - image
+      title: Body_ocr_extract_api_v1_ai_ocr_post
+    Body_stt_transcribe_api_v1_ai_stt_post:
+      properties:
+        audio:
+          type: string
+          format: binary
+          title: Audio
+      type: object
+      required:
+      - audio
+      title: Body_stt_transcribe_api_v1_ai_stt_post
+    ChatIn:
+      properties:
+        message:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Message
+        conversation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Conversation Id
+        user_id:
+          anyOf:
+          - type: string
+            minLength: 1
+          - type: 'null'
+          title: User Id
+        model_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Key
+        use_rag:
+          type: boolean
+          title: Use Rag
+          default: true
+        request_type:
+          type: string
+          pattern: ^(CHAT|SUMMARIZE|ANALYZE|SEARCH|DOCUMENT|TRANSCRIBE|OCR|PREDICT|AGENT)$
+          title: Request Type
+          default: CHAT
+      type: object
+      required:
+      - message
+      title: ChatIn
+    ConversationIn:
+      properties:
+        user_id:
+          type: string
+          minLength: 1
+          title: User Id
+        agent_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Agent Key
+        title:
+          anyOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+          title: Title
+        model_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Key
+        system_prompt_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: System Prompt Code
+      type: object
+      required:
+      - user_id
+      title: ConversationIn
+    FeedbackIn:
+      properties:
+        ai_request_id:
+          type: string
+          minLength: 1
+          title: Ai Request Id
+        user_id:
+          type: string
+          minLength: 1
+          title: User Id
+        rating:
+          anyOf:
+          - type: integer
+            maximum: 5.0
+            minimum: 1.0
+          - type: 'null'
+          title: Rating
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        comment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comment
+        accepted:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Accepted
+      type: object
+      required:
+      - ai_request_id
+      - user_id
+      title: FeedbackIn
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    MemoryIn:
+      properties:
+        user_id:
+          type: string
+          minLength: 1
+          title: User Id
+        memory_type:
+          type: string
+          pattern: ^(EPISODIC|FACT|WORKFLOW|PREFERENCE|KNOWLEDGE)$
+          title: Memory Type
+        content:
+          type: string
+          maxLength: 50000
+          minLength: 1
+          title: Content
+        importance:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+          title: Importance
+          default: 1
+      type: object
+      required:
+      - user_id
+      - memory_type
+      - content
+      title: MemoryIn
+    ModelRegisterIn:
+      properties:
+        model_key:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Model Key
+        family:
+          type: string
+          pattern: ^(LLM|EMBEDDING|ASR|TTS|OCR|VISION|PREDICTION|AGENT)$
+          title: Family
+        base_name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Base Name
+        version:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Version
+        quantization:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quantization
+        context_window:
+          anyOf:
+          - type: integer
+            minimum: 1024.0
+          - type: 'null'
+          title: Context Window
+        purpose:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purpose
+        artifact_ref:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Artifact Ref
+        approved:
+          type: boolean
+          title: Approved
+          default: false
+      type: object
+      required:
+      - model_key
+      - family
+      - base_name
+      - version
+      title: ModelRegisterIn
+    PromptIn:
+      properties:
+        code:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[a-z0-9_]+$
+          title: Code
+        name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Name
+        purpose:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purpose
+        template:
+          type: string
+          maxLength: 50000
+          minLength: 1
+          title: Template
+        vars_schema:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Vars Schema
+        safety_rules:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Safety Rules
+        is_active:
+          type: boolean
+          title: Is Active
+          default: true
+      type: object
+      required:
+      - code
+      - name
+      - template
+      title: PromptIn
+    TtsIn:
+      properties:
+        text:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Text
+        voice:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Voice
+      type: object
+      required:
+      - text
+      title: TtsIn
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

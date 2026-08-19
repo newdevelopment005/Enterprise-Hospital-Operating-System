@@ -1,0 +1,19 @@
+groups:
+  - name: ehos-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate({job="ehos-services"} |~ "result=error" [5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in EHOS services"
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "An EHOS component is down"

@@ -1,0 +1,303 @@
+# EHOS - Phase 0 development stack
+# Docker Compose for local development of the Foundation Platform.
+#
+# NOTE: the phase-0 services are Python FastAPI applications. They are included
+# only if their images are built first (`make build` / `docker compose build`).
+# Infrastructure services (postgres/redis/kafka/minio/keycloak) run as-is.
+#
+# Production uses Kubernetes + Helm (see infrastructure/kubernetes).
+
+name: ehos
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ehos-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ehos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ehos-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: ehos-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - kafka_data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: ehos-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ehos}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ehos-dev-only}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: ehos-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-change-me}
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://postgres:5432/ehos_keycloak"
+      KC_DB_USERNAME: ${POSTGRES_USER:-ehos}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+      KC_HOSTNAME: localhost
+      EHOS_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-change-me}
+      EHOS_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-change-me}
+    ports:
+      - "8400:8080"
+    volumes:
+      - ../backend/identity-service/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /realms/ehos HTTP/1.0\r\n\r' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 20s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+
+  # --- Phase 0 services (built locally with `make build`) ---
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: backend/api-gateway/Dockerfile
+    container_name: ehos-api-gateway
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      REDIS_HOST: redis
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ehos
+      EHOS_ENV: development
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - keycloak
+
+  configuration-service:
+    build:
+      context: ..
+      dockerfile: backend/configuration-service/Dockerfile
+    container_name: ehos-configuration-service
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EHOS_ENV: development
+    ports:
+      - "8100:8100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  audit-service:
+    build:
+      context: ..
+      dockerfile: backend/audit-service/Dockerfile
+    container_name: ehos-audit-service
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EHOS_ENV: development
+    ports:
+      - "8200:8200"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ..
+      dockerfile: backend/notification-service/Dockerfile
+    container_name: ehos-notification-service
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EHOS_ENV: development
+    ports:
+      - "8300:8300"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # --- HospitalGPT (offline local AI platform) ---
+  knowledge-service:
+    build:
+      context: ..
+      dockerfile: backend/knowledge-service/Dockerfile
+    container_name: ehos-knowledge-service
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+      EHOS_ENV: development
+    ports:
+      - "8505:8505"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ai-service:
+    build:
+      context: ..
+      dockerfile: backend/ai-service/Dockerfile
+    container_name: ehos-ai-service
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+      AI_INFERENCE_ADAPTER: mock
+      AI_EMBEDDING_ADAPTER: mock
+      AI_KNOWLEDGE_SERVICE_URL: http://knowledge-service:8505
+      EHOS_ENV: development
+    ports:
+      - "8506:8506"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      knowledge-service:
+        condition: service_started
+
+  prediction-service:
+    build:
+      context: ..
+      dockerfile: backend/prediction-service/Dockerfile
+    container_name: ehos-prediction-service
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-ehos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehos-dev-only}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      PREDICTION_DEFAULT_ADAPTER: seasonal_naive
+      EHOS_ENV: development
+    ports:
+      - "8507:8507"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  # --- Monitoring (optional profile: docker compose --profile monitoring up -d) ---
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: ehos-prometheus
+    profiles: ["monitoring"]
+    volumes:
+      - ../monitoring/prometheus:/etc/prometheus:ro
+    ports:
+      - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: ehos-grafana
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  loki:
+    image: grafana/loki:3.1.0
+    container_name: ehos-loki
+    profiles: ["monitoring"]
+    volumes:
+      - ../monitoring/loki:/etc/loki:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yaml
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: ehos-tempo
+    profiles: ["monitoring"]
+    volumes:
+      - ../monitoring/tempo:/etc/tempo:ro
+      - tempo_data:/tmp/tempo
+    ports:
+      - "3200:3200"
+      - "9095:9095"
+    command: -config.file=/etc/tempo/tempo.yaml
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
+  minio_data:
+  loki_data:
+  tempo_data:

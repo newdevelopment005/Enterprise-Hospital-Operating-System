@@ -1,0 +1,64 @@
+# redis.yaml — Redis 7 cache / rate limiting / pub-sub.
+# Scale replicas to 3 with Redis Sentinel for HA (see helm values).
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: ehos-data
+  labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: ehos }
+spec:
+  clusterIP: None
+  selector: { app.kubernetes.io/name: redis }
+  ports:
+    - { name: redis, port: 6379 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: ehos-data
+  labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: ehos }
+spec:
+  serviceName: redis
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: redis } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: ehos }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              exec redis-server --appendonly yes \
+                --requirepass "$$(cat /etc/redis-password/password)" \
+                --maxmemory 4gb --maxmemory-policy allkeys-lru
+          ports: [{ name: redis, containerPort: 6379 }]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: pw, mountPath: /etc/redis-password, readOnly: true }
+          readinessProbe:
+            exec: { command: ["sh", "-c", "redis-cli -a \"$$(cat /etc/redis-password/password)\" ping | grep -q PONG"] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 2, memory: 6Gi }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: ehos-fast
+        resources: { requests: { storage: 20Gi } }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-password
+  namespace: ehos-data
+type: Opaque
+# NOTE: placeholder — replace with real secret in cluster (see 01-secrets.example.yaml)
+stringData:
+  password: "change-me-redis"

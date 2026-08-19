@@ -1,0 +1,194 @@
+# ehos-platform default values — see values-prod.yaml for the hospital defaults.
+global:
+  imageRegistry: ghcr.io/your-org/ehos
+  imageTag: "0.3.0"
+  imagePullSecrets: [ehos-registry]
+
+namespaces:
+  create: true
+  names:
+    - ehos-platform
+    - ehos-clinical
+    - ehos-ai
+    - ehos-data
+    - ehos-monitoring
+
+## Data plane dependencies (chart.features toggle)
+postgresql:
+  enabled: true
+  auth:
+    username: ehos
+    existingSecret: ehos-postgres
+    secretKeys:
+      userPasswordKey: POSTGRES_PASSWORD
+  primary:
+    persistence: { size: 100Gi }
+    resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { cpu: 4, memory: 8Gi } }
+
+redis:
+  enabled: true
+  architecture: replication
+  auth: { existingSecret: ehos-redis, existingSecretPasswordKey: REDIS_PASSWORD }
+  master: { persistence: { size: 20Gi } }
+  replica:
+    replicaCount: 2
+    persistence: { size: 20Gi }
+
+kafka:
+  enabled: true
+  replicaCount: 3
+  persistence: { size: 100Gi }
+  listeners:
+    client:
+      protocol: PLAINTEXT
+  provisioning:
+    enabled: true
+    topics:
+      - { name: ehos.events, partitions: 12, replicationFactor: 3 }
+      - { name: ehos.audit, partitions: 6, replicationFactor: 3 }
+
+minio:
+  enabled: true
+  mode: distributed
+  replicas: 4
+  drivesPerNode: 1
+  persistence: { size: 100Gi }
+  rootUser: ehos
+  existingSecret: ehos-minio
+  buckets:
+    - ehos-documents
+    - ehos-models
+    - ehos-embeddings
+    - ehos-audit
+
+qdrant:
+  enabled: true
+  persistence: { enabled: true, size: 50Gi }
+  resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { cpu: 4, memory: 8Gi } }
+
+keycloak:
+  enabled: true
+  auth:
+    existingSecret: ehos-keycloak
+  service: { type: ClusterIP }
+  dbchecker:
+    enabled: false
+
+ingress-nginx:
+  enabled: true
+  controller:
+    replicaCount: 2
+    service:
+      type: LoadBalancer
+
+cert-manager:
+  enabled: true
+  installCRDs: true
+
+kube-prometheus-stack:
+  enabled: true
+  grafana:
+    adminPassword: "CHANGE_ME"  # REPLACE via existing secret override
+
+## ---- EHOS application services (rendered by this chart) ----
+## Each service reads its connection/secrets from the `envFromSecrets` secrets
+## (e.g. ehos-service-env) and may override individual vars via `env`.
+services:
+  api-gateway:
+    namespace: ehos-platform
+    replicas: 3
+    image: api-gateway
+    port: 8000
+    envFromSecrets: [ehos-service-env]
+    hpa: { min: 3, max: 10, cpu: 70 }
+    probes: { path: /health, port: 8000 }
+  configuration-service:
+    namespace: ehos-platform
+    replicas: 2
+    image: configuration-service
+    port: 8100
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8100 }
+  audit-service:
+    namespace: ehos-platform
+    replicas: 2
+    image: audit-service
+    port: 8200
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8200 }
+  notification-service:
+    namespace: ehos-platform
+    replicas: 2
+    image: notification-service
+    port: 8300
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8300 }
+  authentication-service:
+    namespace: ehos-platform
+    replicas: 2
+    image: authentication-service
+    port: 8500
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8500 }
+  patient-service:
+    namespace: ehos-clinical
+    replicas: 2
+    image: patient-service
+    port: 8501
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8501 }
+  ehr-service:
+    namespace: ehos-clinical
+    replicas: 2
+    image: ehr-service
+    port: 8502
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8502 }
+  knowledge-service:
+    namespace: ehos-ai
+    replicas: 2
+    image: knowledge-service
+    port: 8505
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8505 }
+  ai-service:
+    namespace: ehos-ai
+    replicas: 2
+    image: ai-service
+    port: 8506
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8506 }
+  prediction-service:
+    namespace: ehos-ai
+    replicas: 2
+    image: prediction-service
+    port: 8507
+    envFromSecrets: [ehos-service-env]
+    probes: { path: /health, port: 8507 }
+
+frontends:
+  ehr-portal: { namespace: ehos-clinical, image: frontend-ehr-portal }
+  patient-registration: { namespace: ehos-clinical, image: frontend-patient-registration }
+  executive-dashboard: { namespace: ehos-platform, image: frontend-executive-dashboard }
+  ai-assistant: { namespace: ehos-ai, image: frontend-ai-assistant }
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: hospital.example.org
+      paths:
+        /api: api-gateway:8000
+        /realms: keycloak:8080
+        /ehr: ehr-portal
+        /register: patient-registration
+        /dash: executive-dashboard
+        /assistant: ai-assistant
+  tls:
+    - secretName: ehos-tls
+      hosts: [hospital.example.org]
+
+monitoring:
+  servicemonitors: true
+
+networkPolicies: true

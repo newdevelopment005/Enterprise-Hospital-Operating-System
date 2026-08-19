@@ -1,0 +1,99 @@
+# 15-backup.yaml — scheduled backup CronJobs to the backup server (S3 target).
+# Strategies defined in infrastructure/backup/BACKUP_STRATEGY.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: ehos-backup
+spec:
+  schedule: "0 1 * * *"               # daily full dump
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          activeDeadlineSeconds: 3600
+          containers:
+            - name: dump
+              image: postgres:16-alpine
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h postgres.ehos-data.svc -U "$$POSTGRES_USER" -Fc -d ehos_platform > /backups/postgres/ehos_platform_$$(date +%F-%H%M).dump
+                  PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h postgres.ehos-data.svc -U "$$POSTGRES_USER" -Fc -d ehos_clinical > /backups/postgres/ehos_clinical_$$(date +%F-%H%M).dump
+                  PGPASSWORD="$$POSTGRES_PASSWORD" pg_dump -h postgres.ehos-data.svc -U "$$POSTGRES_USER" -Fc -d ehos_ai > /backups/postgres/ehos_ai_$$(date +%F-%H%M).dump
+              env:
+                - { name: POSTGRES_USER, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_USER } } }
+                - { name: POSTGRES_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-postgres, key: POSTGRES_PASSWORD } } }
+              volumeMounts: [{ name: backups, mountPath: /backups }]
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: ehos-backup-data
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mirror-to-backup-server
+  namespace: ehos-backup
+spec:
+  schedule: "0 2 * * *"               # nightly mirror of S3 + vector snapshots
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: mc
+              image: minio/mc:RELEASE.2024-08-17T11-33-47Z
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  mc alias set local http://minio.ehos-data.svc:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+                  mc alias set remote "$$BACKUP_TARGET_S3_ENDPOINT" "$$BACKUP_ACCESS_KEY" "$$BACKUP_SECRET_KEY"
+                  mc mirror --overwrite --remove --watch local/ remote/$$BACKUP_BUCKET/
+              env:
+                - { name: MINIO_ROOT_USER, valueFrom: { secretKeyRef: { name: ehos-minio, key: MINIO_ROOT_USER } } }
+                - { name: MINIO_ROOT_PASSWORD, valueFrom: { secretKeyRef: { name: ehos-minio, key: MINIO_ROOT_PASSWORD } } }
+                - { name: BACKUP_TARGET_S3_ENDPOINT, valueFrom: { secretKeyRef: { name: ehos-backup, key: BACKUP_TARGET_S3_ENDPOINT } } }
+                - { name: BACKUP_ACCESS_KEY, valueFrom: { secretKeyRef: { name: ehos-backup, key: BACKUP_TARGET_ACCESS_KEY } } }
+                - { name: BACKUP_SECRET_KEY, valueFrom: { secretKeyRef: { name: ehos-backup, key: BACKUP_TARGET_SECRET_KEY } } }
+                - { name: BACKUP_BUCKET, valueFrom: { secretKeyRef: { name: ehos-backup, key: BACKUP_TARGET_BUCKET } } }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: qdrant-snapshot
+  namespace: ehos-backup
+spec:
+  schedule: "15 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: snapshot
+              image: curlimages/curl:8.8.0
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  for c in knowledge_corpora; do
+                    curl -sf -X POST "http://qdrant.ehos-ai.svc:6333/collections/$$c/snapshots" -o /dev/null
+                  done
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ehos-backup-data
+  namespace: ehos-backup
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ehos-fast
+  resources: { requests: { storage: 200Gi } }
