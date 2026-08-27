@@ -144,6 +144,17 @@ async def resolve_alert(
     return success_response(_alert_out(alert))
 
 
+@router.get("/{patient_id}/alerts")
+async def list_alerts(
+    patient_id: str,
+    active_only: bool = True,
+    session: AsyncSession = Depends(get_session),
+    svc: SvcDep = ...,
+) -> dict:
+    alerts = await svc.list_alerts(session, _uuid(patient_id), active_only=active_only)
+    return success_response({"items": [_alert_out(a) for a in alerts], "total": len(alerts)})
+
+
 @router.post("/{patient_id}/biometrics")
 async def enroll_biometric(
     patient_id: str,

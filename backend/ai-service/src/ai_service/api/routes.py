@@ -20,6 +20,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_service.dto import schemas as dto
 from ai_service.service import ai_service as svc
+from ai_service.service.agents import agent_action_out, agent_def_out, agent_run_out
+from ai_service.service.serializers import (
+    conversation_out,
+    feedback_out,
+    memory_out,
+    message_out,
+    prompt_out,
+    request_out,
+)
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -69,6 +78,12 @@ def _actor(fallback: uuid.UUID, sub: object) -> uuid.UUID:
         return fallback
 
 
+def _bind_user(payload, claims: dict):
+    """Bind the authenticated subject as the actor, never the client body."""
+    payload.user_id = str(_actor(uuid.UUID(int=0), claims.get("sub")))
+    return payload
+
+
 def _ok(data, status_code: int = 200) -> dict:
     return {"success": True, "data": data, "statusCode": status_code}
 
@@ -83,7 +98,8 @@ async def chat(
     session: AsyncSession = Depends(get_session),
     _user: CurrentUser = ...,
 ):
-    return _ok((await _s(request).chat(session, payload)).model_dump(mode="json"), status.HTTP_201_CREATED)
+    result = (await _s(request).chat(session, _bind_user(payload, _user))).model_dump(mode="json")
+    return _ok(result, status.HTTP_201_CREATED)
 
 
 # --- conversations ---------------------------------------------------------------
@@ -96,8 +112,8 @@ async def create_conversation(
     session: AsyncSession = Depends(get_session),
     _user: CurrentUser = ...,
 ):
-    row = await _s(request).create_conversation(session, payload)
-    return _ok(svc.conversation_out(row), status.HTTP_201_CREATED)
+    row = await _s(request).create_conversation(session, _bind_user(payload, _user))
+    return _ok(conversation_out(row), status.HTTP_201_CREATED)
 
 
 @router.get("/conversations")
@@ -111,7 +127,7 @@ async def list_conversations(
     # conversations are scoped to the authenticated caller
     actor = str(_user.get("sub"))
     rows, total = await _s(request).list_conversations(session, actor, limit or 20, offset)
-    return _ok({"items": [svc.conversation_out(r) for r in rows], "total": total})
+    return _ok({"items": [conversation_out(r) for r in rows], "total": total})
 
 
 @router.get("/conversations/{conversation_id}/messages")
@@ -122,7 +138,7 @@ async def list_messages(
     _user: CurrentUser = ...,
 ):
     rows = await _s(request).list_messages(session, _uuid(conversation_id))
-    return _ok({"items": [svc.message_out(r) for r in rows], "total": len(rows)})
+    return _ok({"items": [message_out(r) for r in rows], "total": len(rows)})
 
 
 # --- models ----------------------------------------------------------------------
@@ -167,7 +183,7 @@ async def list_prompts(request: Request, session: AsyncSession = Depends(get_ses
     await _s(request).ensure_default_prompt(session)
     await session.flush()
     rows = await _s(request).list_prompts(session)
-    return _ok({"items": [svc.prompt_out(r) for r in rows], "total": len(rows)})
+    return _ok({"items": [prompt_out(r) for r in rows], "total": len(rows)})
 
 
 @router.post("/prompts", status_code=status.HTTP_201_CREATED)
@@ -178,7 +194,7 @@ async def create_prompt(
     _user: CurrentUser = ...,
 ):
     row = await _s(request).create_prompt(session, payload)
-    return _ok(svc.prompt_out(row), status.HTTP_201_CREATED)
+    return _ok(prompt_out(row), status.HTTP_201_CREATED)
 
 
 # --- memory ----------------------------------------------------------------------
@@ -193,7 +209,7 @@ async def list_memories(
 ):
     # memories are scoped to the authenticated caller
     rows = await _s(request).list_memories(session, str(_user.get("sub")), memory_type)
-    return _ok({"items": [svc.memory_out(r) for r in rows], "total": len(rows)})
+    return _ok({"items": [memory_out(r) for r in rows], "total": len(rows)})
 
 
 @router.put("/memories", status_code=status.HTTP_201_CREATED)
@@ -203,8 +219,8 @@ async def add_memory(
     session: AsyncSession = Depends(get_session),
     _user: CurrentUser = ...,
 ):
-    row = await _s(request).add_memory(session, payload)
-    return _ok(svc.memory_out(row), status.HTTP_201_CREATED)
+    row = await _s(request).add_memory(session, _bind_user(payload, _user))
+    return _ok(memory_out(row), status.HTTP_201_CREATED)
 
 
 @router.delete("/memories/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -227,7 +243,7 @@ async def approve_request(
     _user: CurrentUser = ...,
 ):
     row = await _s(request).approve_request(session, _uuid(request_id), payload)
-    return _ok(svc.request_out(row))
+    return _ok(request_out(row))
 
 
 @router.get("/requests/{request_id}")
@@ -235,7 +251,7 @@ async def get_request(
     request_id: str, request: Request, session: AsyncSession = Depends(get_session), _user: CurrentUser = ...
 ):
     row = await _s(request).get_request(session, _uuid(request_id))
-    return _ok(svc.request_out(row))
+    return _ok(request_out(row))
 
 
 # --- feedback ---------------------------------------------------------------------
@@ -245,8 +261,8 @@ async def get_request(
 async def add_feedback(
     payload: dto.FeedbackIn, request: Request, session: AsyncSession = Depends(get_session), _user: CurrentUser = ...
 ):
-    row = await _s(request).add_feedback(session, payload)
-    return _ok(svc.feedback_out(row), status.HTTP_201_CREATED)
+    row = await _s(request).add_feedback(session, _bind_user(payload, _user))
+    return _ok(feedback_out(row), status.HTTP_201_CREATED)
 
 
 # --- media facades -----------------------------------------------------------------
@@ -299,7 +315,7 @@ async def ocr_extract(
 @router.get("/agents")
 async def list_agents(request: Request, session: AsyncSession = Depends(get_session), _user: CurrentUser = ...):
     rows = await _s(request).agents.list_definitions(session)
-    return _ok({"items": [svc.agent_def_out(r) for r in rows], "total": len(rows)})
+    return _ok({"items": [agent_def_out(r) for r in rows], "total": len(rows)})
 
 
 @router.post("/agents/{key}/run", status_code=status.HTTP_201_CREATED)
@@ -314,7 +330,7 @@ async def run_agent(
     run = await _s(request).agents.run_agent(
         session, key, payload.goal, _actor(uuid.UUID(int=0), _user.get("sub")), context=payload.context
     )
-    return _ok(svc.agent_run_out(run), status.HTTP_201_CREATED)
+    return _ok(agent_run_out(run), status.HTTP_201_CREATED)
 
 
 @router.get("/agent-runs")
@@ -328,7 +344,7 @@ async def list_agent_runs(
     offset: int = Query(default=0, ge=0),
 ):
     rows, total = await _s(request).agents.list_runs(session, agent_key, status, limit or 20, offset)
-    return _ok({"items": [svc.agent_run_out(r) for r in rows], "total": total})
+    return _ok({"items": [agent_run_out(r) for r in rows], "total": total})
 
 
 @router.get("/agent-runs/{run_id}")
@@ -336,7 +352,7 @@ async def get_agent_run(
     run_id: str, request: Request, session: AsyncSession = Depends(get_session), _user: CurrentUser = ...
 ):
     run = await _s(request).agents.get_run(session, _uuid(run_id))
-    return _ok(svc.agent_run_out(run))
+    return _ok(agent_run_out(run))
 
 
 @router.get("/agent-runs/{run_id}/actions")
@@ -344,7 +360,7 @@ async def list_agent_actions(
     run_id: str, request: Request, session: AsyncSession = Depends(get_session), _user: CurrentUser = ...
 ):
     rows = await _s(request).agents.list_actions(session, _uuid(run_id))
-    return _ok({"items": [svc.agent_action_out(r) for r in rows], "total": len(rows)})
+    return _ok({"items": [agent_action_out(r) for r in rows], "total": len(rows)})
 
 
 @router.post("/agent-actions/{action_id}/approve")
@@ -359,14 +375,14 @@ async def decide_agent_action(
     run = await _s(request).agents.decide_action(
         session, _uuid(action_id), _actor(uuid.UUID(int=0), _user.get("sub")), payload.approved, payload.comments
     )
-    return _ok(svc.agent_run_out(run))
+    return _ok(agent_run_out(run))
 
 
 # --- status ------------------------------------------------------------------------
 
 
 @router.get("/status")
-async def status(request: Request):
+async def service_status(request: Request):
     settings = request.app.state.settings
     return _ok(
         {

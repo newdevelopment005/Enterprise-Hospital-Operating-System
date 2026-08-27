@@ -1,5 +1,6 @@
 // Typed client for the ai-service (HospitalGPT) REST API.
 
+import { AuthError, getValidToken } from './auth'
 import type {
   AiModel,
   AiStatus,
@@ -17,13 +18,46 @@ import type {
 } from './types'
 
 const BASE = '/api/v1/ai'
+const DEFAULT_TIMEOUT_MS = 180_000
+
+async function authHeaders(): Promise<Record<string, string>> {
+  try {
+    const token = await getValidToken()
+    return { Authorization: `Bearer ${token}` }
+  } catch {
+    throw new AuthError()
+  }
+}
+
+async function parseEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
+  const text = await response.text()
+  if (!text.trim()) {
+    throw new Error(`Backend service unavailable (HTTP ${response.status}) — is ai-service running on port 8506?`)
+  }
+  try {
+    return JSON.parse(text) as ApiEnvelope<T>
+  } catch {
+    throw new Error(`Backend returned an invalid response (HTTP ${response.status})`)
+  }
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  })
-  const envelope = (await response.json()) as ApiEnvelope<T>
+  const headers = { 'Content-Type': 'application/json', ...(await authHeaders()), ...options.headers }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+  let response: Response
+  try {
+    response = await fetch(`${BASE}${path}`, { headers, ...options, signal: controller.signal })
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error('The request timed out. The local AI model may still be loading - please try again.')
+    }
+    throw err instanceof Error ? err : new Error('Network error')
+  } finally {
+    clearTimeout(timer)
+  }
+  if (response.status === 401) throw new AuthError('Session expired, please sign in again')
+  const envelope = await parseEnvelope<T>(response)
   if (!envelope.success) throw new Error(envelope.message || envelope.errorCode || 'Request failed')
   return envelope.data
 }
@@ -90,8 +124,9 @@ export const aiApi = {
 }
 
 async function requestMedia<T>(path: string, form: FormData): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, { method: 'POST', body: form })
-  const envelope = (await response.json()) as ApiEnvelope<T>
+  const response = await fetch(`${BASE}${path}`, { method: 'POST', body: form, headers: await authHeaders() })
+  if (response.status === 401) throw new AuthError('Session expired, please sign in again')
+  const envelope = await parseEnvelope<T>(response)
   if (!envelope.success) throw new Error(envelope.message || envelope.errorCode || 'Request failed')
   return envelope.data
 }

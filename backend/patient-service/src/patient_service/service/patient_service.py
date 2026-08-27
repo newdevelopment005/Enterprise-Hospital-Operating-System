@@ -503,6 +503,21 @@ class PatientService:
         await self._timeline(session, patient_id, "ALERT_RESOLVED", actor, {"alert": alert.title})
         return alert
 
+    async def list_alerts(
+        self, session: AsyncSession, patient_id, active_only: bool = True
+    ) -> list[MedicalAlert]:
+        """Return the patient's medical alerts (optionally active ones only)."""
+        await self._get_or_404(session, patient_id)
+        stmt = (
+            select(MedicalAlert)
+            .where(MedicalAlert.patient_id == patient_id, MedicalAlert.deleted_at.is_(None))
+            .order_by(MedicalAlert.created_at.desc())
+        )
+        if active_only:
+            stmt = stmt.where(MedicalAlert.active.is_(True))
+        rows = await session.scalars(stmt)
+        return list(rows)
+
     async def enroll_biometric(
         self, session: AsyncSession, patient_id, data: BiometricIn, actor=None
     ) -> PatientBiometric:

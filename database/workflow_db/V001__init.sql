@@ -1,95 +1,95 @@
 -- ============================================================================
 -- EHOS  workflow_db  V001__init.sql
--- workflow-service: workflow definitions, instances & transition audit trail.
--- Design: DATABASE_DESIGN.md sections 6.11, 2.5-2.7, 10; role 00_db_roles.sql.
--- Shared objects (pgcrypto, pg_trgm, fn_append_history(), ehos_make_history(),
--- outbox_events) are applied FIRST by apply.py; not included here.
--- Postgres 16+, lowercase snake_case.
+-- workflow-service: definitions, instances, transitions (state machine).
 -- ============================================================================
 
 BEGIN;
 
 -- ----------------------------------------------------------------------------
--- workflow_definitions
+-- workflow_definitions — reusable workflow templates
 -- ----------------------------------------------------------------------------
 CREATE TABLE workflow_definitions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     key             TEXT NOT NULL,
     name            TEXT NOT NULL,
-    domain          TEXT NOT NULL,
-    version         INT NOT NULL,
-    definition_json JSONB NOT NULL,
+    description     TEXT,
+    version         INT NOT NULL DEFAULT 1,
+    states          JSONB,
+    transitions     JSONB,
+    initial_state   TEXT NOT NULL,
     is_active       BOOLEAN NOT NULL DEFAULT true,
-    status          TEXT NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by      UUID,
     updated_by      UUID,
+    model_version   INT NOT NULL DEFAULT 1,
+    status          TEXT NOT NULL,
     audit_reference TEXT,
     deleted_at      TIMESTAMPTZ,
     deleted_by      UUID,
     deletion_reason TEXT
 );
 
-CREATE UNIQUE INDEX uq_workflow_definitions_key_version ON workflow_definitions (key, version) WHERE deleted_at IS NULL;
-CREATE INDEX idx_workflow_definitions_domain ON workflow_definitions (domain);
+CREATE UNIQUE INDEX uq_wf_def_key_version ON workflow_definitions (key, version) WHERE deleted_at IS NULL;
+CREATE INDEX idx_wf_def_key ON workflow_definitions (key);
 
 -- ----------------------------------------------------------------------------
--- workflow_instances
+-- workflow_instances — running instances of a definition
 -- ----------------------------------------------------------------------------
 CREATE TABLE workflow_instances (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    definition_id UUID NOT NULL REFERENCES workflow_definitions(id),
-    workflow_key  TEXT NOT NULL,
-    version       INT NOT NULL,
-    entity_type   TEXT,
-    entity_id     UUID,
-    current_state TEXT NOT NULL,
-    context       JSONB,
-    started_by    UUID,
-    started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    ended_at      TIMESTAMPTZ,
-    status        TEXT NOT NULL DEFAULT 'RUNNING' CHECK (status IN ('RUNNING','COMPLETED','TERMINATED','SUSPENDED')),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by    UUID,
-    updated_by    UUID,
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    definition_id   UUID NOT NULL REFERENCES workflow_definitions(id),
+    entity_type     TEXT NOT NULL,
+    entity_id       UUID NOT NULL,
+    patient_id      UUID,
+    current_state   TEXT NOT NULL,
+    context         JSONB,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at    TIMESTAMPTZ,
+    status          TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','COMPLETED','CANCELLED','PAUSED')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by      UUID,
+    updated_by      UUID,
+    model_version   INT NOT NULL DEFAULT 1,
     audit_reference TEXT,
-    deleted_at    TIMESTAMPTZ,
-    deleted_by    UUID,
+    deleted_at      TIMESTAMPTZ,
+    deleted_by      UUID,
     deletion_reason TEXT
 );
 
-CREATE INDEX idx_workflow_entity ON workflow_instances (entity_type, entity_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_workflow_state ON workflow_instances (current_state, status);
-CREATE INDEX idx_workflow_definition ON workflow_instances (definition_id);
+CREATE INDEX idx_wf_inst_entity ON workflow_instances (entity_type, entity_id);
+CREATE INDEX idx_wf_inst_patient ON workflow_instances (patient_id) WHERE patient_id IS NOT NULL;
+CREATE INDEX idx_wf_inst_state ON workflow_instances (current_state);
 
 -- ----------------------------------------------------------------------------
--- workflow_transitions
+-- workflow_transitions — state change audit trail
 -- ----------------------------------------------------------------------------
 CREATE TABLE workflow_transitions (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    instance_id    UUID NOT NULL REFERENCES workflow_instances(id),
-    from_state     TEXT,
-    to_state       TEXT NOT NULL,
-    event          TEXT,
-    action_ref     TEXT,
-    performed_by   UUID,
-    performed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    guard_result   JSONB,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by     UUID,
-    updated_by     UUID,
-    version        INT NOT NULL DEFAULT 1,
-    status         TEXT NOT NULL,
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    instance_id     UUID NOT NULL REFERENCES workflow_instances(id),
+    from_state      TEXT NOT NULL,
+    to_state        TEXT NOT NULL,
+    event           TEXT NOT NULL,
+    actor_id        UUID NOT NULL,
+    comment         TEXT,
+    metadata        JSONB,
+    performed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by      UUID,
+    updated_by      UUID,
+    model_version   INT NOT NULL DEFAULT 1,
+    status          TEXT NOT NULL,
     audit_reference TEXT,
-    deleted_at     TIMESTAMPTZ,
-    deleted_by     UUID,
+    deleted_at      TIMESTAMPTZ,
+    deleted_by      UUID,
     deletion_reason TEXT
 );
 
-CREATE INDEX idx_workflow_transitions_instance ON workflow_transitions (instance_id, performed_at);
+CREATE INDEX idx_wf_trans_instance ON workflow_transitions (instance_id);
+CREATE INDEX idx_wf_trans_from ON workflow_transitions (from_state);
+CREATE INDEX idx_wf_trans_to ON workflow_transitions (to_state);
 
 -- ----------------------------------------------------------------------------
 -- history tables
@@ -99,7 +99,7 @@ SELECT ehos_make_history('workflow_instances');
 SELECT ehos_make_history('workflow_transitions');
 
 -- ----------------------------------------------------------------------------
--- grants to application role
+-- grants
 -- ----------------------------------------------------------------------------
 GRANT USAGE ON SCHEMA public TO ehos_workflow_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ehos_workflow_app;

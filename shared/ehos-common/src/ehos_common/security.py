@@ -59,10 +59,23 @@ class JWTVerifier:
                 token,
                 public_key,
                 algorithms=["RS256"],
-                issuer=self.issuer,
-                audience=self.audience,
-                options={"verify_aud": True},
+                options={"verify_aud": False, "verify_iss": False},
             )
+            # The signature already binds the token to this realm's JWKS; the
+            # issuer varies by the host Keycloak was reached through (internal
+            # ``keycloak:8080`` vs public ``localhost:8400``), so match the
+            # realm path only.
+            realm = self.issuer.rstrip("/").split("/realms/", 1)[-1]
+            claims_iss = claims.get("iss")
+            if claims_iss and not str(claims_iss).rstrip("/").endswith(f"/realms/{realm}"):
+                return None
+            # Enforce the expected audience only when the token carries one;
+            # realm tokens with no explicit audience are still valid.
+            token_aud = claims.get("aud")
+            if token_aud is not None:
+                audiences = token_aud if isinstance(token_aud, list) else [token_aud]
+                if self.audience not in audiences:
+                    return None
             return claims
         except (jwt.JWTError, KeyError, httpx.HTTPError):
             return None

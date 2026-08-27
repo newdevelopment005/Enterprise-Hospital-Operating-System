@@ -11,6 +11,12 @@ service exposes (see ``backend/<service>/src/<svc>/api/routes.py``):
 - notification-service:   ``/api/v1/templates``, ``/api/v1/send``
 - authentication-service: ``/api/v1/auth`` (public + self-protected endpoints)
 - patient-service:        ``/api/v1/patients`` (demographics, merge)
+- appointment-service:    ``/api/v1/appointments`` (booking, reschedule, cancel)
+- queue-service:          ``/api/v1/queues`` (digital queues, tickets)
+- billing-service:        ``/api/v1/billing`` (charges, invoices, payments)
+- prescription-service:   ``/api/v1/prescriptions`` (prescribing, MAR, allergies)
+- pharmacy-service:       ``/api/v1/pharmacy`` (catalog, stock, dispensing)
+- laboratory-service:     ``/api/v1/laboratory`` (test catalog, orders, samples, results)
 - ehr-service:            ``/api/v1/ehr`` (clinical record sub-resources)
 - ai-service:             ``/api/v1/ai``
 - knowledge-service:      ``/api/v1/knowledge``
@@ -24,13 +30,14 @@ Production deployments may use Kong/Envoy/NGINX as the gateway; this FastAPI
 gateway mirrors the same routing contract for development.
 """
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class RouteConfig(TypedDict):
     upstream: str
     requires_auth: bool
     required_role: str | None
+    rewrite_prefix: NotRequired[str]
 
 
 ROUTES: dict[str, RouteConfig] = {
@@ -46,6 +53,71 @@ ROUTES: dict[str, RouteConfig] = {
     },
     "/api/v1/patients": {
         "upstream": "http://patient-service:8501",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/appointments": {
+        "upstream": "http://appointment-service:8503",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/queues": {
+        "upstream": "http://queue-service:8504",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/billing": {
+        "upstream": "http://billing-service:8509",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/prescriptions": {
+        "upstream": "http://prescription-service:8510",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/pharmacy": {
+        "upstream": "http://pharmacy-service:8511",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/laboratory": {
+        "upstream": "http://laboratory-service:8512",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/radiology": {
+        "upstream": "http://radiology-service:8513",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/inventory": {
+        "upstream": "http://inventory-service:8514",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/workflows": {
+        "upstream": "http://workflow-service:8515",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/documentation": {
+        "upstream": "http://clinical-documentation-service:8516",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/insurance": {
+        "upstream": "http://insurance-service:8517",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/reporting": {
+        "upstream": "http://reporting-service:8518",
+        "requires_auth": True,
+        "required_role": None,
+    },
+    "/api/v1/analytics": {
+        "upstream": "http://analytics-service:8508",
         "requires_auth": True,
         "required_role": None,
     },
@@ -84,6 +156,11 @@ ROUTES: dict[str, RouteConfig] = {
         "requires_auth": True,
         "required_role": "administrator",
     },
+    "/api/v1/all": {
+        "upstream": "http://configuration-service:8100",
+        "requires_auth": True,
+        "required_role": None,
+    },
     "/api/v1/templates": {
         "upstream": "http://notification-service:8300",
         "requires_auth": True,
@@ -94,6 +171,23 @@ ROUTES: dict[str, RouteConfig] = {
         "requires_auth": True,
         "required_role": None,
     },
+    # Frontend short prefixes (used by the ehr-portal Vite proxy and NGINX
+    # rewrites). Held in the gateway so every client reaches services through a
+    # single entry point; each forwards to the canonical /api/v1 path by
+    # stripping the wire prefix (see apply_rewrite).
+    "/mpi": {"upstream": "http://patient-service:8501", "requires_auth": True, "required_role": None, "rewrite_prefix": "/mpi"},
+    "/sched": {"upstream": "http://appointment-service:8503", "requires_auth": True, "required_role": None, "rewrite_prefix": "/sched"},
+    "/q": {"upstream": "http://queue-service:8504", "requires_auth": True, "required_role": None, "rewrite_prefix": "/q"},
+    "/bill": {"upstream": "http://billing-service:8509", "requires_auth": True, "required_role": None, "rewrite_prefix": "/bill"},
+    "/rx": {"upstream": "http://prescription-service:8510", "requires_auth": True, "required_role": None, "rewrite_prefix": "/rx"},
+    "/pharm": {"upstream": "http://pharmacy-service:8511", "requires_auth": True, "required_role": None, "rewrite_prefix": "/pharm"},
+    "/lab": {"upstream": "http://laboratory-service:8512", "requires_auth": True, "required_role": None, "rewrite_prefix": "/lab"},
+    "/rad": {"upstream": "http://radiology-service:8513", "requires_auth": True, "required_role": None, "rewrite_prefix": "/rad"},
+    "/inv": {"upstream": "http://inventory-service:8514", "requires_auth": True, "required_role": None, "rewrite_prefix": "/inv"},
+    "/wf": {"upstream": "http://workflow-service:8515", "requires_auth": True, "required_role": None, "rewrite_prefix": "/wf"},
+    "/doc": {"upstream": "http://clinical-documentation-service:8516", "requires_auth": True, "required_role": None, "rewrite_prefix": "/doc"},
+    "/ins": {"upstream": "http://insurance-service:8517", "requires_auth": True, "required_role": None, "rewrite_prefix": "/ins"},
+    "/rpt": {"upstream": "http://reporting-service:8518", "requires_auth": True, "required_role": None, "rewrite_prefix": "/rpt"},
 }
 
 
@@ -106,3 +200,12 @@ def match_route(path: str) -> RouteConfig | None:
         if best is None or len(prefix) > best[0]:
             best = (len(prefix), config)
     return best[1] if best else None
+
+
+def apply_rewrite(path: str, route: RouteConfig) -> str:
+    """Strip a frontend wire prefix so the upstream sees its canonical path."""
+    rewrite_prefix = route.get("rewrite_prefix")
+    if rewrite_prefix and path.startswith(rewrite_prefix):
+        stripped = path[len(rewrite_prefix):]
+        return stripped or "/"
+    return path

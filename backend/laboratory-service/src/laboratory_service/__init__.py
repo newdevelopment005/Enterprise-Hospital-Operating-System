@@ -1,0 +1,1 @@
+"""EHOS Laboratory Service"""

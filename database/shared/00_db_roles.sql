@@ -37,7 +37,8 @@ BEGIN
         'ehos_payroll_app',
         'ehos_reporting_app',
         'ehos_ai_app',
-        'ehos_knowledge_app'
+        'ehos_knowledge_app',
+        'ehos_analytics_app'         -- analytics warehouse
     ]) LOOP
         IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = role_name) THEN
             EXECUTE format('CREATE ROLE %I NOLOGIN', role_name);

@@ -40,6 +40,17 @@ export function ChatPanel({ models, status, modelKey, setModelKey, useRag, setUs
     setRating(null)
     const payload: ChatIn = { message: text, user_id: USER_ID, model_key: modelKey, use_rag: useRag }
     if (conversationId) payload.conversation_id = conversationId
+    setInput('')
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `local-${Date.now()}`,
+        conversation_id: conversationId ?? '',
+        role: 'USER',
+        content: text,
+        created_at: new Date().toISOString(),
+      },
+    ])
     try {
       const result = await aiApi.chat(payload)
       setConversationId(result.conversation_id)
@@ -48,6 +59,7 @@ export function ChatPanel({ models, status, modelKey, setModelKey, useRag, setUs
       setMessages(history.items)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chat failed')
+      setMessages((prev) => prev.filter((m) => !m.id.startsWith('local-')))
     } finally {
       setBusy(false)
       setInput('')

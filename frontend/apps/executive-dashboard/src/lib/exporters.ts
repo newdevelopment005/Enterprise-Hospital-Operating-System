@@ -3,8 +3,19 @@
 
 import type { Datasets, Forecast } from './types'
 
-export function fmtNumber(value: number, format: string): string {
-  if (format === 'currency') return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 })}`
+export function fmtNumber(value: number, format: string, currencyCode = 'USD'): string {
+  if (format === 'currency') {
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode,
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+      }).format(value)
+    } catch {
+      return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 })}`
+    }
+  }
   if (format === 'percent') return `${value.toFixed(1)}%`
   if (format === 'minutes') return `${Math.round(value)} min`
   return value.toLocaleString('en-US', { maximumFractionDigits: 1 })
@@ -29,13 +40,13 @@ function worksheet(name: string, rows: string): string {
   return `<Worksheet ss:Name="${xmlEscape(name)}"><Table>${rows}</Table></Worksheet>`
 }
 
-export function exportExcel(datasets: Datasets, forecasts: Forecast[], insights: string[]): void {
+export function exportExcel(datasets: Datasets, forecasts: Forecast[], insights: string[], currencyCode = 'USD'): void {
   const now = new Date()
   const stamp = now.toISOString().slice(0, 19).replace(/[:T]/g, '-')
 
   const kpiSheet = rowsFor(
     ['KPI', 'Value', 'Delta %', 'Status', 'Last updated'],
-    datasets.kpis.map((k) => [k.label, fmtNumber(k.value, k.format), k.deltaPct.toFixed(1), k.status, fmtDate(k.asOf)]),
+    datasets.kpis.map((k) => [k.label, fmtNumber(k.value, k.format, currencyCode), k.deltaPct.toFixed(1), k.status, fmtDate(k.asOf)]),
   )
 
   const trendSheet =
@@ -44,8 +55,8 @@ export function exportExcel(datasets: Datasets, forecasts: Forecast[], insights:
         p.t.slice(0, 10),
         fmtNumber(datasets.admissions.points[i]?.v ?? 0, 'number'),
         fmtNumber(datasets.discharges.points[i]?.v ?? 0, 'number'),
-        fmtNumber(datasets.revenue.points[i]?.v ?? 0, 'currency'),
-        fmtNumber(datasets.expenses.points[i]?.v ?? 0, 'currency'),
+        fmtNumber(datasets.revenue.points[i]?.v ?? 0, 'currency', currencyCode),
+        fmtNumber(datasets.expenses.points[i]?.v ?? 0, 'currency', currencyCode),
         fmtNumber(datasets.occupancy.points[i]?.v ?? 0, 'percent'),
         fmtNumber(datasets.waiting.points[i]?.v ?? 0, 'minutes'),
         fmtNumber(datasets.mortality.points[i]?.v ?? 0, 'number'),

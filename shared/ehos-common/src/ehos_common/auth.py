@@ -36,8 +36,8 @@ class AuthDeps:
     def __init__(self, settings: ServiceSettings):
         self.settings = settings
         self._verifier: JWTVerifier = get_verifier(
-            settings.keycloak_url.rstrip("/") + "/realms/" + settings.keycloak_realm,
-            issuer=settings.keycloak_realm,
+            settings.jwks_url,
+            issuer=settings.issuer,
             audience="account",
         )
 

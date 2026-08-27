@@ -1,121 +1,119 @@
 -- ============================================================================
--- EHOS  insurance_db / V001__init.sql
--- Service: insurance-service
--- Description: Baseline schema for the insurance database: insurance providers,
---   patient insurance policies, coverage verifications and claims.
--- Design: DATABASE_DESIGN.md sections 2, 7.2, 9, 10.
--- Requires: shared 01_extensions.sql (pgcrypto, pg_trgm), 02_history_trigger.sql
---   (fn_append_history(), ehos_make_history()), 03_outbox.sql (outbox_events)
---   applied first by apply.py. No \i includes in this file.
--- Postgres 16+, lowercase snake_case, app role: ehos_insurance_app.
+-- EHOS  insurance_db  V001__init.sql
+-- insurance-service: coverage, claims, prior authorizations.
 -- ============================================================================
 
 BEGIN;
 
-CREATE TABLE insurance_providers (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code        TEXT NOT NULL,
-    name        TEXT NOT NULL,
-    contact     JSONB,
-    is_active   BOOLEAN NOT NULL DEFAULT true,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by  UUID,
-    updated_by  UUID,
-    version     INT NOT NULL DEFAULT 1,
-    status      TEXT NOT NULL,
-    audit_reference TEXT,
-    deleted_at  TIMESTAMPTZ,
-    deleted_by  UUID,
-    deletion_reason TEXT
+-- ----------------------------------------------------------------------------
+-- coverage — patient insurance coverage
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS coverage (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id     UUID NOT NULL,
+    payer_name     VARCHAR NOT NULL,
+    plan_name      VARCHAR,
+    policy_number  VARCHAR NOT NULL,
+    group_number   VARCHAR,
+    coverage_type  VARCHAR NOT NULL,
+    effective_date VARCHAR NOT NULL,
+    termination_date VARCHAR,
+    copay          DOUBLE PRECISION,
+    deductible     DOUBLE PRECISION,
+    coinsurance    DOUBLE PRECISION,
+    is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by     UUID,
+    updated_by     UUID,
+    model_version  INTEGER NOT NULL DEFAULT 1,
+    status         VARCHAR NOT NULL,
+    audit_reference VARCHAR,
+    deleted_at     TIMESTAMPTZ,
+    deleted_by     UUID,
+    deletion_reason TEXT,
+    CONSTRAINT ck_coverage_type CHECK (coverage_type IN ('HEALTH','DENTAL','VISION','PRESCRIPTION','MENTAL_HEALTH'))
 );
 
-CREATE UNIQUE INDEX uq_insurance_providers_code ON insurance_providers (code) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_coverage_patient ON coverage(patient_id, is_active);
 
-SELECT ehos_make_history('insurance_providers');
-
-CREATE TABLE patient_insurance_policies (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id       UUID NOT NULL,
-    provider_id      UUID NOT NULL REFERENCES insurance_providers(id),
-    policy_number    TEXT NOT NULL,
-    insured_progeny  TEXT,
-    coverage_type    TEXT,
-    valid_from       DATE NOT NULL,
-    valid_to         DATE,
-    attributes       JSONB,
-    status           TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','EXPIRED','CANCELLED')),
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by       UUID,
-    updated_by       UUID,
-    version          INT NOT NULL DEFAULT 1,
-    audit_reference  TEXT,
-    deleted_at       TIMESTAMPTZ,
-    deleted_by       UUID,
-    deletion_reason  TEXT
+-- ----------------------------------------------------------------------------
+-- claims — insurance claim lifecycle
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS claims (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id     UUID NOT NULL,
+    coverage_id    UUID NOT NULL,
+    encounter_id   UUID,
+    service_date   VARCHAR NOT NULL,
+    diagnosis_codes JSON,
+    procedure_codes JSON,
+    total_amount   DOUBLE PRECISION NOT NULL,
+    approved_amount DOUBLE PRECISION,
+    paid_amount    DOUBLE PRECISION,
+    patient_responsibility DOUBLE PRECISION,
+    status         VARCHAR NOT NULL DEFAULT 'DRAFT',
+    denial_reason  TEXT,
+    submitted_at   TIMESTAMPTZ,
+    adjudicated_at TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by     UUID,
+    updated_by     UUID,
+    model_version  INTEGER NOT NULL DEFAULT 1,
+    audit_reference VARCHAR,
+    deleted_at     TIMESTAMPTZ,
+    deleted_by     UUID,
+    deletion_reason TEXT,
+    CONSTRAINT ck_claim_status CHECK (status IN ('DRAFT','SUBMITTED','REVIEWING','APPROVED','PARTIAL','DENIED','APPEALED','PAID','VOID'))
 );
 
-CREATE INDEX idx_policies_patient ON patient_insurance_policies (patient_id) WHERE deleted_at IS NULL;
-CREATE INDEX idx_policies_provider ON patient_insurance_policies (provider_id);
+CREATE INDEX IF NOT EXISTS idx_claims_patient ON claims(patient_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_claims_coverage ON claims(coverage_id);
 
-SELECT ehos_make_history('patient_insurance_policies');
-
-CREATE TABLE coverage_verifications (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    policy_id        UUID NOT NULL REFERENCES patient_insurance_policies(id),
-    service_category TEXT,
-    verified_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    verified_by      UUID,
-    result           JSONB NOT NULL,
-    coverage_percent NUMERIC(5,2),
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by       UUID,
-    updated_by       UUID,
-    version          INT NOT NULL DEFAULT 1,
-    status           TEXT NOT NULL,
-    audit_reference  TEXT,
-    deleted_at       TIMESTAMPTZ,
-    deleted_by       UUID,
-    deletion_reason  TEXT
+-- ----------------------------------------------------------------------------
+-- prior_authorizations — pre-service insurance approvals
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS prior_authorizations (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id     UUID NOT NULL,
+    coverage_id    UUID NOT NULL,
+    service_type   VARCHAR NOT NULL,
+    procedure_codes JSON,
+    clinical_justification TEXT,
+    requested_by   UUID NOT NULL,
+    status         VARCHAR NOT NULL DEFAULT 'PENDING',
+    decision       VARCHAR,
+    approved_units INTEGER,
+    valid_from     VARCHAR,
+    valid_to       VARCHAR,
+    decided_by     UUID,
+    decided_at     TIMESTAMPTZ,
+    denial_reason  TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by     UUID,
+    updated_by     UUID,
+    model_version  INTEGER NOT NULL DEFAULT 1,
+    audit_reference VARCHAR,
+    deleted_at     TIMESTAMPTZ,
+    deleted_by     UUID,
+    deletion_reason TEXT,
+    CONSTRAINT ck_pauth_status CHECK (status IN ('PENDING','SUBMITTED','APPROVED','DENIED','EXPIRED','CANCELLED'))
 );
 
-CREATE INDEX idx_coverage_policy ON coverage_verifications (policy_id);
+CREATE INDEX IF NOT EXISTS idx_pauth_patient ON prior_authorizations(patient_id);
 
-SELECT ehos_make_history('coverage_verifications');
-
-CREATE TABLE claims (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    claim_number     TEXT NOT NULL,
-    patient_id       UUID NOT NULL,
-    policy_id        UUID REFERENCES patient_insurance_policies(id),
-    invoice_id       UUID,
-    amount           NUMERIC(12,2) NOT NULL,
-    status           TEXT NOT NULL DEFAULT 'DRAFT'
-                     CHECK (status IN ('DRAFT','SUBMITTED','IN_REVIEW','APPROVED','DENIED','PAID','REJECTED','REOPENED')),
-    submitted_at     TIMESTAMPTZ,
-    submitted_by     UUID,
-    provider_response JSONB,
-    paid_amount      NUMERIC(12,2),
-    denial_reason    TEXT,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by       UUID,
-    updated_by       UUID,
-    version          INT NOT NULL DEFAULT 1,
-    audit_reference  TEXT,
-    deleted_at       TIMESTAMPTZ,
-    deleted_by       UUID,
-    deletion_reason  TEXT
-);
-
-CREATE UNIQUE INDEX uq_claims_claim_number ON claims (claim_number) WHERE deleted_at IS NULL;
-CREATE INDEX idx_claims_patient ON claims (patient_id, status) WHERE deleted_at IS NULL;
-CREATE INDEX idx_claims_policy ON claims (policy_id);
-
+-- ----------------------------------------------------------------------------
+-- history tables
+-- ----------------------------------------------------------------------------
+SELECT ehos_make_history('coverage');
 SELECT ehos_make_history('claims');
+SELECT ehos_make_history('prior_authorizations');
 
+-- ----------------------------------------------------------------------------
+-- grants
+-- ----------------------------------------------------------------------------
 GRANT USAGE ON SCHEMA public TO ehos_insurance_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ehos_insurance_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ehos_insurance_app;

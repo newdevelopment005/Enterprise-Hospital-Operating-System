@@ -50,6 +50,7 @@ SERVICE_DATABASES = {
     "reporting_db": ("ehos_reporting", "ehos_reporting_app"),
     "ai_db": ("ehos_ai", "ehos_ai_app"),
     "knowledge_db": ("ehos_knowledge", "ehos_knowledge_app"),
+    "analytics_db": ("ehos_analytics", "ehos_analytics_app"),
 }
 
 SHARED_FILES = ("01_extensions.sql", "02_history_trigger.sql", "03_outbox.sql")

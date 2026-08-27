@@ -19,7 +19,7 @@ proxy_router = APIRouter()
 
 @proxy_router.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy(request: Request, path: str) -> Response:
-    from api_gateway.routing.routes import match_route
+    from api_gateway.routing.routes import apply_rewrite, match_route
 
     start = time.perf_counter()
     route = match_route(request.url.path)
@@ -28,7 +28,7 @@ async def proxy(request: Request, path: str) -> Response:
         return Response(status_code=404)
 
     upstream_base = route["upstream"]
-    raw_path = request.url.path
+    raw_path = apply_rewrite(request.url.path, route)
     query = request.url.query
     target_url = f"{upstream_base}{raw_path}" + (f"?{query}" if query else "")
     headers = {key: value for key, value in request.headers.items() if key.lower() not in {"host"}}

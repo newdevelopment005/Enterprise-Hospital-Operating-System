@@ -1,0 +1,1 @@
+"""EHOS pharmacy-service package."""

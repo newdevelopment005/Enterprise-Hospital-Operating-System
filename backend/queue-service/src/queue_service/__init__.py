@@ -1,0 +1,1 @@
+"""EHOS queue-service package."""

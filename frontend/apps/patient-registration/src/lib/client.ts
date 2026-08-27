@@ -13,12 +13,24 @@ import type {
 
 const BASE = '/api/v1/patients'
 
+async function parseEnvelope<T>(response: Response): Promise<ApiEnvelope<T>> {
+  const text = await response.text()
+  if (!text.trim()) {
+    throw new Error(`Backend service unavailable (HTTP ${response.status}) — is patient-service running on port 8501?`)
+  }
+  try {
+    return JSON.parse(text) as ApiEnvelope<T>
+  } catch {
+    throw new Error(`Backend returned an invalid response (HTTP ${response.status})`)
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   })
-  const envelope = (await response.json()) as ApiEnvelope<T>
+  const envelope = await parseEnvelope<T>(response)
   if (!envelope.success) {
     throw new Error(envelope.message || envelope.errorCode || 'Request failed')
   }

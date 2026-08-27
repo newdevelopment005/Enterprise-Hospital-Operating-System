@@ -12,7 +12,7 @@
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 28800,
   "defaultSignatureAlgorithm": "RS256",
-  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1) and notUsername",
+  "passwordPolicy": "length(12) and lowerCase(1) and digits(1) and notUsername",
 
   "roles": {
     "realm": [

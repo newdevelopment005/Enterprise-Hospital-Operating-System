@@ -11,7 +11,7 @@ import hashlib
 import re
 import uuid
 import wave
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +30,8 @@ You assist healthcare professionals with approved, local knowledge only.
 You never diagnose, never prescribe, and never access unauthorized data.
 If you cannot answer from the provided context, say: 'I do not have enough verified information to answer this safely.'
 Answer in the form: Summary / Key Information / Risks / Recommended Next Steps / Human Approval Required.
+Use the conversation history to resolve follow-up questions: combine prior questions and answers
+with the new user question into one coherent reply.
 
 Conversation history:
 {{conversation}}
@@ -205,12 +207,18 @@ class AiService:
             tokens_out=result.tokens_out,
         )
 
+        # Explicit microsecond-precise timestamps keep USER/ASSISTANT turns in
+        # insertion order (server_default now() has second precision, and the
+        # UUID id tiebreaker is random).
+        user_turn_at = datetime.now(UTC)
+        assistant_turn_at = user_turn_at + timedelta(microseconds=1)
         session.add(
             ent.AiMessage(
                 conversation_id=conversation.id,
                 role="USER",
                 content=payload.message,
                 request_id=request.id,
+                created_at=user_turn_at,
             )
         )
         session.add(
@@ -223,6 +231,7 @@ class AiService:
                 latency_ms=result.latency_ms,
                 request_id=request.id,
                 sources={"items": [s.model_dump() for s in sources]} if sources else None,
+                created_at=assistant_turn_at,
             )
         )
         conversation.last_message_at = datetime.now(UTC)
@@ -294,7 +303,7 @@ class AiService:
                     ent.AiMessage.conversation_id == conversation_id,
                     ent.AiMessage.deleted_at.is_(None),
                 )
-                .order_by(ent.AiMessage.created_at)
+                .order_by(ent.AiMessage.created_at, ent.AiMessage.id)
             )
         ).scalars().all()
         return [(row.role, row.content) for row in rows]
@@ -337,7 +346,7 @@ class AiService:
             await session.execute(
                 select(ent.AiMessage)
                 .where(ent.AiMessage.conversation_id == conversation_id, ent.AiMessage.deleted_at.is_(None))
-                .order_by(ent.AiMessage.created_at)
+                .order_by(ent.AiMessage.created_at, ent.AiMessage.id)
             )
         ).scalars().all()
         return list(rows)

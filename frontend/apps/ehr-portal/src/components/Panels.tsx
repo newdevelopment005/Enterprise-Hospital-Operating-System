@@ -18,7 +18,7 @@ import type {
 
 export const DEFAULT_AUTHOR = '22222222-2222-2222-2222-222222222222'
 
-function useLoad<T>(loader: () => Promise<T>) {
+export function useLoad<T>(loader: () => Promise<T>) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -39,7 +39,7 @@ function useLoad<T>(loader: () => Promise<T>) {
   return { data, error, loading, reload }
 }
 
-function PanelShell({ title, addForm, error, children }: {
+export function PanelShell({ title, addForm, error, children }: {
   title: string
   addForm?: ReactNode
   error?: string | null
@@ -55,7 +55,7 @@ function PanelShell({ title, addForm, error, children }: {
   )
 }
 
-function fmt(ts?: string): string {
+export function fmt(ts?: string): string {
   return ts ? ts.replace('T', ' ').slice(0, 16) : '—'
 }
 
@@ -349,26 +349,81 @@ export function DiagnosesPanel({ patientId, authorId }: { patientId: string; aut
 
 // ------------------------------------------------------------------ Medications
 
+const ROUTES = ['ORAL', 'IV', 'IM', 'SC', 'TOPICAL', 'INHALED', 'RECTAL', 'SUBLINGUAL', 'OTIC', 'OPHTHALMIC', 'NASAL', 'OTHER']
+const DOSE_UNITS = ['mg', 'g', 'mcg', 'mL', 'IU', 'units', 'drops', 'puffs']
+
+function sigText(m: Medication): string {
+  const parts: string[] = []
+  if (m.dose != null) parts.push(`${m.dose}${m.dose_unit ? ` ${m.dose_unit}` : ''}`)
+  parts.push(m.route)
+  if (m.frequency) parts.push(m.frequency)
+  if (m.duration) parts.push(`for ${m.duration}`)
+  if (m.prn) parts.push('PRN')
+  return parts.join(' · ')
+}
+
 export function MedicationsPanel({ patientId, authorId }: { patientId: string; authorId: string }) {
   const [name, setName] = useState('')
   const [strength, setStrength] = useState('')
+  const [dose, setDose] = useState('')
+  const [doseUnit, setDoseUnit] = useState('mg')
   const [route, setRoute] = useState('ORAL')
   const [freq, setFreq] = useState('')
+  const [duration, setDuration] = useState('')
+  const [prn, setPrn] = useState(false)
   const [indication, setIndication] = useState('')
+  const [instructions, setInstructions] = useState('')
+  const [showAll, setShowAll] = useState(false)
   const { data, error, reload } = useLoad(() => ehrApi.listMedications(patientId))
+  const { data: allergyData } = useLoad(() => ehrApi.listAllergies(patientId))
   const [busy, setBusy] = useState(false)
+
+  const drugAllergies = (allergyData?.items ?? []).filter(
+    (a) => a.allergen_type === 'DRUG' && a.status === 'ACTIVE',
+  )
+  const conflicts =
+    name.trim().length > 1
+      ? drugAllergies.filter((a) => {
+          const al = a.allergen.toLowerCase()
+          const ml = name.trim().toLowerCase()
+          return al.includes(ml) || ml.includes(al)
+        })
+      : []
+
+  const items = (data?.items ?? []).filter((m) => (showAll ? true : m.status === 'ACTIVE'))
+  const activeCount = (data?.items ?? []).filter((m) => m.status === 'ACTIVE').length
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    if (
+      conflicts.length > 0 &&
+      !window.confirm(
+        `ALLERGY ALERT\n\nThis patient has an active drug allergy:\n${conflicts
+          .map((c) => `- ${c.allergen} (${c.severity}): ${c.reaction ?? 'reaction not documented'}`)
+          .join('\n')}\n\nPrescribe "${name}" anyway?`,
+      )
+    ) {
+      return
+    }
     setBusy(true)
     try {
       await ehrApi.addMedication(patientId, {
-        medication_name: name, strength: strength || undefined, route,
-        frequency: freq || undefined, indication: indication || undefined,
+        medication_name: name,
+        strength: strength || undefined,
+        dose: dose === '' ? undefined : Number(dose),
+        dose_unit: doseUnit || undefined,
+        route,
+        frequency: freq || undefined,
+        duration: duration || undefined,
+        prn,
+        indication: indication || undefined,
+        instructions: instructions || undefined,
         prescriber_id: authorId,
       })
-      setName(''); setStrength(''); setFreq(''); setIndication('')
+      setName(''); setStrength(''); setDose(''); setFreq(''); setDuration(''); setPrn(false); setIndication(''); setInstructions('')
       await reload()
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'failed')
     } finally {
       setBusy(false)
     }
@@ -376,44 +431,107 @@ export function MedicationsPanel({ patientId, authorId }: { patientId: string; a
 
   return (
     <PanelShell
-      title="Medications"
+      title={`Medications (${activeCount} active)`}
       error={error}
       addForm={
-        <form onSubmit={submit} className="grid">
-          <input placeholder="Medication name *" value={name} onChange={(e) => setName(e.target.value)} required />
-          <input placeholder="Strength" value={strength} onChange={(e) => setStrength(e.target.value)} />
-          <select value={route} onChange={(e) => setRoute(e.target.value)}>
-            {['ORAL', 'IV', 'IM', 'SC', 'TOPICAL', 'INHALED', 'RECTAL', 'SUBLINGUAL'].map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
-          <input placeholder="Frequency (e.g. TID)" value={freq} onChange={(e) => setFreq(e.target.value)} />
-          <input placeholder="Indication" value={indication} onChange={(e) => setIndication(e.target.value)} />
-          <button type="submit" disabled={busy}>Prescribe</button>
+        <form onSubmit={submit}>
+          {conflicts.length > 0 && (
+            <div className="allergy-warning">
+              <strong>Allergy conflict:</strong>{' '}
+              {conflicts.map((c) => `${c.allergen} (${c.severity})`).join(', ')} — confirm before prescribing.
+            </div>
+          )}
+          <div className="grid">
+            <label>
+              Medication *
+              <input placeholder="e.g. Amoxicillin" value={name} onChange={(e) => setName(e.target.value)} required />
+            </label>
+            <label>
+              Strength
+              <input placeholder="e.g. 500 mg" value={strength} onChange={(e) => setStrength(e.target.value)} />
+            </label>
+            <label>
+              Dose
+              <input placeholder="e.g. 1" type="number" step="any" min="0" value={dose} onChange={(e) => setDose(e.target.value)} />
+            </label>
+            <label>
+              Dose unit
+              <select value={doseUnit} onChange={(e) => setDoseUnit(e.target.value)}>
+                {DOSE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </label>
+            <label>
+              Route
+              <select value={route} onChange={(e) => setRoute(e.target.value)}>
+                {ROUTES.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <label>
+              Frequency
+              <input placeholder="e.g. TID / q8h" value={freq} onChange={(e) => setFreq(e.target.value)} />
+            </label>
+            <label>
+              Duration
+              <input placeholder="e.g. 7 days" value={duration} onChange={(e) => setDuration(e.target.value)} />
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={prn} onChange={(e) => setPrn(e.target.checked)} />
+              PRN (as needed)
+            </label>
+          </div>
+          <div className="grid">
+            <label>
+              Indication
+              <input placeholder="Why is this being prescribed?" value={indication} onChange={(e) => setIndication(e.target.value)} />
+            </label>
+            <label>
+              Instructions to patient
+              <input placeholder="e.g. Take with food" value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+            </label>
+          </div>
+          <button type="submit" disabled={busy}>{busy ? 'Prescribing…' : 'Prescribe'}</button>
         </form>
       }
     >
+      <div className="filter-row">
+        <button className={showAll ? 'chip' : 'chip active'} onClick={() => setShowAll(false)}>Active</button>
+        <button className={showAll ? 'chip active' : 'chip'} onClick={() => setShowAll(true)}>All</button>
+      </div>
       <table>
         <thead>
-          <tr><th>Medication</th><th>Strength</th><th>Route</th><th>Freq</th><th>Status</th><th /></tr>
+          <tr><th>Medication</th><th>Sig</th><th>Indication</th><th>Instructions</th><th>Prescribed</th><th>Status</th><th /></tr>
         </thead>
         <tbody>
-          {(data?.items ?? []).map((m: Medication) => (
-            <tr key={m.id}>
-              <td>{m.medication_name}</td>
-              <td>{m.strength ?? '—'}</td>
-              <td>{m.route}</td>
-              <td>{m.frequency ?? '—'}</td>
-              <td>{m.status}</td>
+          {items.map((m: Medication) => (
+            <tr key={m.id} className={m.status !== 'ACTIVE' ? 'row-inactive' : undefined}>
               <td>
-                {m.status !== 'DISCONTINUED' && (
-                  <button className="link" onClick={() => void ehrApi.discontinueMedication(patientId, m.id).then(reload)}>
+                <div className="cell-main">{m.medication_name}</div>
+                <div className="muted">{m.strength ?? ''}</div>
+              </td>
+              <td>{sigText(m)}</td>
+              <td>{m.indication ?? '—'}</td>
+              <td className="clamp" title={m.instructions}>{m.instructions ?? '—'}</td>
+              <td>{fmt(m.prescribed_at)}</td>
+              <td><span className={`status-badge status-${m.status.toLowerCase()}`}>{m.status}</span></td>
+              <td>
+                {m.status === 'ACTIVE' && (
+                  <button className="link danger" onClick={() => {
+                    if (window.confirm(`Discontinue ${m.medication_name}?`)) {
+                      void ehrApi.discontinueMedication(patientId, m.id).then(reload)
+                    }
+                  }}>
                     discontinue
                   </button>
+                )}
+                {m.status === 'DISCONTINUED' && m.discontinued_at && (
+                  <span className="muted">at {fmt(m.discontinued_at)}</span>
                 )}
               </td>
             </tr>
           ))}
+          {items.length === 0 && (
+            <tr><td colSpan={7} className="muted">No {showAll ? '' : 'active '}medications recorded.</td></tr>
+          )}
         </tbody>
       </table>
     </PanelShell>
@@ -492,26 +610,47 @@ export function OrdersPanel({ patientId, authorId }: { patientId: string; author
 
 // ------------------------------------------------------------------ Allergies
 
+function severityClass(severity: string): string {
+  switch (severity) {
+    case 'HIGH': return 'sev-high'
+    case 'MEDIUM': return 'sev-medium'
+    case 'LOW': return 'sev-low'
+    default: return 'sev-unknown'
+  }
+}
+
 export function AllergiesPanel({ patientId, authorId }: { patientId: string; authorId: string }) {
   const [allergen, setAllergen] = useState('')
   const [allergenType, setAllergenType] = useState('DRUG')
   const [reaction, setReaction] = useState('')
   const [severity, setSeverity] = useState('UNKNOWN')
+  const [onset, setOnset] = useState('')
+  const [showResolved, setShowResolved] = useState(false)
   const { data, error, reload } = useLoad(() => ehrApi.listAllergies(patientId))
   const [busy, setBusy] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const items = (data?.items ?? []).filter((a) => (showResolved ? true : a.status === 'ACTIVE'))
+  const active = (data?.items ?? []).filter((a) => a.status === 'ACTIVE')
+  const highSeverity = active.filter((a) => a.severity === 'HIGH')
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
+    setFormError(null)
     try {
       await ehrApi.addAllergy(patientId, {
-        allergen, allergen_type: allergenType, reaction: reaction || undefined,
-        severity, recorded_by: authorId,
+        allergen,
+        allergen_type: allergenType,
+        reaction: reaction || undefined,
+        severity,
+        onset_date: onset || undefined,
+        recorded_by: authorId,
       })
-      setAllergen(''); setReaction('')
+      setAllergen(''); setReaction(''); setOnset(''); setSeverity('UNKNOWN')
       await reload()
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'failed')
+      setFormError(err instanceof Error ? err.message : 'Failed to record allergy')
     } finally {
       setBusy(false)
     }
@@ -519,43 +658,87 @@ export function AllergiesPanel({ patientId, authorId }: { patientId: string; aut
 
   return (
     <PanelShell
-      title="Allergies"
+      title={`Allergies (${active.length} active)`}
       error={error}
       addForm={
-        <form onSubmit={submit} className="grid">
-          <input placeholder="Allergen *" value={allergen} onChange={(e) => setAllergen(e.target.value)} required />
-          <select value={allergenType} onChange={(e) => setAllergenType(e.target.value)}>
-            {['DRUG', 'FOOD', 'ENVIRONMENT', 'OTHER'].map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <input placeholder="Reaction" value={reaction} onChange={(e) => setReaction(e.target.value)} />
-          <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-            {['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN'].map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <button type="submit" disabled={busy}>Record</button>
+        <form onSubmit={submit}>
+          <div className="grid">
+            <label>
+              Allergen *
+              <input placeholder="e.g. Penicillin" value={allergen} onChange={(e) => setAllergen(e.target.value)} required />
+            </label>
+            <label>
+              Type
+              <select value={allergenType} onChange={(e) => setAllergenType(e.target.value)}>
+                {['DRUG', 'FOOD', 'ENVIRONMENT', 'OTHER'].map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+            <label>
+              Severity
+              <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
+                {['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN'].map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+            <label>
+              Onset date
+              <input type="date" value={onset} onChange={(e) => setOnset(e.target.value)} />
+            </label>
+          </div>
+          <div className="grid">
+            <label>
+              Reaction observed
+              <input placeholder="e.g. Urticaria, anaphylaxis" value={reaction} onChange={(e) => setReaction(e.target.value)} />
+            </label>
+          </div>
+          {allergenType === 'DRUG' && severity === 'HIGH' && (
+            <div className="allergy-warning">
+              High-severity drug allergy — this will trigger a prescribing alert in the Medications tab.
+            </div>
+          )}
+          {formError && <p className="alert-error">{formError}</p>}
+          <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Record allergy'}</button>
         </form>
       }
     >
+      {highSeverity.length > 0 && (
+        <div className="allergy-warning">
+          <strong>High-severity allergies on file:</strong>{' '}
+          {highSeverity.map((a) => `${a.allergen}${a.reaction ? ` — ${a.reaction}` : ''}`).join('; ')}
+        </div>
+      )}
+      <div className="filter-row">
+        <button className={!showResolved ? 'chip active' : 'chip'} onClick={() => setShowResolved(false)}>Active</button>
+        <button className={showResolved ? 'chip active' : 'chip'} onClick={() => setShowResolved(true)}>All</button>
+      </div>
       <table>
         <thead>
-          <tr><th>Allergen</th><th>Type</th><th>Reaction</th><th>Severity</th><th>Status</th><th /></tr>
+          <tr><th>Allergen</th><th>Type</th><th>Reaction</th><th>Severity</th><th>Onset</th><th>Recorded</th><th>Status</th><th /></tr>
         </thead>
         <tbody>
-          {(data?.items ?? []).map((a: Allergy) => (
-            <tr key={a.id}>
-              <td>{a.allergen}</td>
+          {items.map((a: Allergy) => (
+            <tr key={a.id} className={a.status !== 'ACTIVE' ? 'row-inactive' : undefined}>
+              <td className="cell-main">{a.allergen}</td>
               <td>{a.allergen_type}</td>
-              <td>{a.reaction ?? '—'}</td>
-              <td>{a.severity}</td>
-              <td>{a.status}</td>
+              <td className="clamp" title={a.reaction}>{a.reaction ?? '—'}</td>
+              <td><span className={`sev-badge ${severityClass(a.severity)}`}>{a.severity}</span></td>
+              <td>{a.onset_date ? a.onset_date.slice(0, 10) : '—'}</td>
+              <td>{fmt(a.recorded_at)}</td>
+              <td><span className={`status-badge status-${a.status.toLowerCase()}`}>{a.status}</span></td>
               <td>
-                {a.status !== 'RESOLVED' && (
+                {a.status === 'ACTIVE' && (
                   <button className="link" onClick={() => void ehrApi.resolveAllergy(patientId, a.id).then(reload)}>
                     resolve
                   </button>
                 )}
+                {a.status !== 'ACTIVE' && a.resolved_at && (
+                  <span className="muted">at {fmt(a.resolved_at)}</span>
+                )}
               </td>
             </tr>
           ))}
+          {items.length === 0 && (
+            <tr><td colSpan={8} className="muted">No known {showResolved ? '' : 'active '}allergies recorded.</td></tr>
+          )}
         </tbody>
       </table>
     </PanelShell>
@@ -715,17 +898,40 @@ export function ChartOverview({
   onNavigate: (tab: string) => void
 }) {
   const { data, error } = useLoad(() => ehrApi.chart(patientId))
+  const vitals = (data?.sections?.vitals?.items ?? []) as Array<Record<string, unknown>>
+  const latestVitals = vitals.slice(0, 6)
   return (
     <PanelShell title="Patient Chart" error={error}>
       {data && (
-        <div className="chart-grid">
-          {Object.entries(data.sections).map(([name, section]) => (
-            <button key={name} className="chart-tile" onClick={() => onNavigate(name)}>
-              <strong>{section.count}</strong>
-              <span>{name.replace(/_/g, ' ')}</span>
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="chart-grid">
+            {Object.entries(data.sections).map(([name, section]) => (
+              <button key={name} className="chart-tile" onClick={() => onNavigate(name)}>
+                <strong>{section.count}</strong>
+                <span>{name.replace(/_/g, ' ')}</span>
+              </button>
+            ))}
+          </div>
+          {latestVitals.length > 0 && (
+            <>
+              <h4 className="latest-title">Latest vitals</h4>
+              <div className="latest-vitals">
+                {latestVitals.map((v) => (
+                  <div key={String(v.id)} className="vital-chip">
+                    <strong>{v.vital_type as string}</strong>
+                    <span>
+                      {v.value_numeric !== undefined && v.value_numeric !== null
+                        ? `${v.value_numeric}`
+                        : (v.value_text as string) ?? '—'}
+                      {v.unit ? ` ${v.unit}` : ''}
+                    </span>
+                    <em className="muted">{fmt(String(v.recorded_at ?? ''))}</em>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </PanelShell>
   )

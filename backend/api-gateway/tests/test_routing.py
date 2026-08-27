@@ -1,6 +1,11 @@
 """Tests for gateway route matching."""
 
-from api_gateway.routing.routes import ROUTES, match_route
+from api_gateway.routing.routes import ROUTES, apply_rewrite, match_route
+
+FRONTEND_PROXY_PREFIXES = {
+    "/mpi", "/sched", "/q", "/bill", "/rx", "/pharm", "/lab", "/rad",
+    "/inv", "/wf", "/doc", "/ins", "/rpt",
+}
 
 
 def test_route_matching_most_specific_prefix():
@@ -55,7 +60,24 @@ def test_notification_routes_resolve():
 
 def test_every_route_has_a_coherent_config():
     for prefix, cfg in ROUTES.items():
-        assert prefix.startswith("/api/v1/")
+        assert prefix.startswith("/api/v1/") or prefix in FRONTEND_PROXY_PREFIXES, prefix
         assert cfg["upstream"].startswith("http://")
         assert isinstance(cfg["requires_auth"], bool)
         assert cfg["required_role"] is None or isinstance(cfg["required_role"], str)
+
+
+def test_frontend_proxy_prefixes_resolve_and_gate():
+    for prefix in FRONTEND_PROXY_PREFIXES:
+        route = match_route(prefix + "/api/v1/some/resource")
+        assert route is not None, prefix
+        assert route["requires_auth"] is True, prefix
+        assert route["upstream"].startswith("http://"), prefix
+
+
+def test_frontend_proxy_prefix_is_rewritten_to_canonical_path():
+    assert apply_rewrite("/mpi/api/v1/patients/abc-123", match_route("/mpi/api/v1/patients/abc-123")) == "/api/v1/patients/abc-123"
+    assert apply_rewrite("/lab/api/v1/laboratory/tests", match_route("/lab/api/v1/laboratory/tests")) == "/api/v1/laboratory/tests"
+    canonical = match_route("/api/v1/patients/abc-123")
+    assert apply_rewrite("/api/v1/patients/abc-123", canonical) == "/api/v1/patients/abc-123"
+    bare = match_route("/pharm")
+    assert apply_rewrite("/pharm", bare) == "/"

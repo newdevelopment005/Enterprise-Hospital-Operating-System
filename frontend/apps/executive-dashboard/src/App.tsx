@@ -7,14 +7,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { DepartmentPanel } from './components/DepartmentPanel'
 import { ForecastPanel } from './components/ForecastPanel'
 import { InsightsPanel } from './components/InsightsPanel'
 import { KpiCard } from './components/KpiCard'
 import { GroupedBarChart, LineChart } from './components/Charts'
-import { aiApi, fetchForecast, fetchPredictionTargets } from './lib/client'
+import { aiApi, fetchForecast, fetchLocale, fetchOverview, fetchPredictionTargets } from './lib/client'
 import { buildDatasets, demoForecasts, ruleInsights } from './lib/demo'
+import { makeMoney, makeTimeFormatter, overviewToDatasets } from './lib/live'
 import { exportExcel, exportPdf, fmtNumber } from './lib/exporters'
-import type { Datasets, Forecast, Insight } from './lib/types'
+import type { AnalyticsOverview, Datasets, Forecast, Insight, LocaleInfo } from './lib/types'
 
 const FORECAST_KEYS = [
   'patient-inflow.department.7d',
@@ -24,11 +26,6 @@ const FORECAST_KEYS = [
   'medicine-usage.medication.30d',
 ]
 
-const MONEY = (v: number, unit: string) => {
-  if (unit === '$') return fmtNumber(v, 'currency')
-  if (v >= 1000) return `$${(v / 1000).toFixed(1)}k`
-  return String(Math.round(v))
-}
 const NUM = (v: number) => String(Math.round(v))
 const PCT = (v: number) => `${v.toFixed(1)}%`
 
@@ -64,6 +61,8 @@ const REFRESH_OPTIONS = [
 
 export default function App() {
   const [datasets, setDatasets] = useState<Datasets>(() => buildDatasets())
+  const [overview, setOverview] = useState<AnalyticsOverview | null>(null)
+  const [locale, setLocale] = useState<LocaleInfo | null>(null)
   const [forecasts, setForecasts] = useState<Forecast[]>([])
   const [targetsNote, setTargetsNote] = useState<string | null>(null)
   const [insights, setInsights] = useState<Insight[]>([])
@@ -72,14 +71,50 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState(() => new Date())
   const [banner, setBanner] = useState<string | null>(null)
 
-  // Real-time KPI refresh loop.
+  // Load live multi-department data + detected country (currency/timezone).
+  const loadLive = useCallback(async () => {
+    if (!locale) {
+      const loc = await fetchLocale()
+      if (loc) setLocale(loc)
+    }
+    const fresh = await fetchOverview()
+    if (fresh) {
+      setOverview(fresh)
+      setDatasets(overviewToDatasets(fresh))
+      if (fresh.locale && !locale) setLocale(fresh.locale)
+      return true
+    }
+    return false
+  }, [locale])
+
+  // One-time + interval live refresh; falls back to demo data offline.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const live = await loadLive()
+      if (!cancelled && !live) setDatasets(buildDatasets())
+      if (!cancelled) setLastUpdated(new Date())
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [loadLive])
+
   useEffect(() => {
     const timer = setInterval(() => {
-      setDatasets(() => buildDatasets())
-      setLastUpdated(new Date())
+      void (async () => {
+        const live = overview ? await fetchOverview() : null
+        if (live) {
+          setOverview(live)
+          setDatasets(overviewToDatasets(live))
+        } else if (!overview) {
+          setDatasets(buildDatasets())
+        }
+        setLastUpdated(new Date())
+      })()
     }, refreshMs || 100000)
     return () => clearInterval(timer)
-  }, [refreshMs])
+  }, [refreshMs, overview])
 
   // One-time loads: forecasts from prediction-service (+ demo fallback), targets.
   useEffect(() => {
@@ -144,19 +179,28 @@ export default function App() {
   }, [runBriefing])
 
   const refreshNow = () => {
-    const fresh = buildDatasets()
-    setDatasets(fresh)
-    setLastUpdated(new Date())
-    void runBriefing(fresh)
+    void (async () => {
+      const live = await fetchOverview()
+      const fresh = live ? overviewToDatasets(live) : buildDatasets()
+      if (live) setOverview(live)
+      setDatasets(fresh)
+      setLastUpdated(new Date())
+      void runBriefing(fresh)
+    })()
   }
 
   const handleExportExcel = () => {
-    exportExcel(datasets, forecasts, [...insights.map((i) => i.text)])
+    exportExcel(datasets, forecasts, [...insights.map((i) => i.text)], locale?.currencyCode ?? 'USD')
   }
 
   const { revenue, expenses, admissions, discharges, occupancy, utilization, waiting } = datasets
 
-  const currencyFmt = useMemo(() => MONEY, [])
+  const currencyFmt = useMemo(() => makeMoney(locale), [locale])
+  const localTime = useMemo(() => makeTimeFormatter(locale), [locale])
+  const fmtAll = useCallback(
+    (v: number, format: string) => fmtNumber(v, format, locale?.currencyCode ?? 'USD'),
+    [locale],
+  )
 
   return (
     <div className="shell">
@@ -166,9 +210,14 @@ export default function App() {
           <p>Real-time hospital KPIs · advisory forecasts · AI insights · no cloud</p>
         </div>
         <div className="header-actions">
-          <span className="live-pill">
+          {locale && (
+            <span className="locale-pill" title={`Detected country · ${locale.resolution ?? 'auto'}`}>
+              {locale.countryName} · {locale.currencyCode} · {locale.timezone} (UTC{locale.utcOffset.replace('UTC', '')})
+            </span>
+          )}
+          <span className="live-pill" title={`Data refreshed at ${lastUpdated.toLocaleTimeString()}`}>
             <span className="live-dot" />
-            LIVE · {lastUpdated.toLocaleTimeString()}
+            LIVE · {localTime()}
           </span>
           <select
             className="refresh-select"
@@ -225,6 +274,8 @@ export default function App() {
       </section>
 
       <ForecastPanel forecasts={forecasts} targetsNote={targetsNote} />
+
+      {overview && <DepartmentPanel departments={overview.departments} fmt={fmtAll} />}
 
       <InsightsPanel insights={insights} loading={insightLoading} onRefresh={refreshNow} />
 

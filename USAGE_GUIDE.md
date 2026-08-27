@@ -53,7 +53,8 @@ npm run dev                             # serves on 5173; proxies /api to its se
 Gateway-protected routes need a token issued by the `ehos` realm. Get one with
 the password grant (use the admin user imported from
 `backend/identity-service/keycloak/realm-ehos.json`; password =
-`KEYCLOAK_ADMIN_PASSWORD`, default `change-me`):
+`KEYCLOAK_ADMIN_PASSWORD`, dev default `Ehos-Admin-2026` for both the Keycloak
+master and the `ehos` realm admin):
 
 ```bash
 curl -s -X POST http://localhost:8400/realms/ehos/protocol/openid-connect/token \
@@ -249,6 +250,12 @@ curl -s -H "Authorization: Bearer <KEYCLOAK_TOKEN>" http://localhost:8506/api/v1
 
 > Every `ai-service` endpoint requires a valid bearer token (Keycloak JWKS,
 > fail-closed). Get one as in §2.
+>
+> **The ai-assistant app** (http://localhost:5175) handles this for you: it
+> shows a sign-in form and proxies the Keycloak token endpoint same-origin
+> (`/auth` → `http://localhost:8400`). Enter `admin` / `Ehos-Admin-2026` (or any
+> `ehos` realm user) and the client attaches the token to every `/api/v1/ai`
+> request, auto-refreshing it on expiry.
 
 **Chat with local RAG:**
 

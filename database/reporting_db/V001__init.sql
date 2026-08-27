@@ -1,66 +1,98 @@
 -- ============================================================================
--- EHOS  reporting_db / V001__init.sql
--- Service: reporting-service
--- Description: Baseline schema for the reporting database: report definitions
---   and report run executions, with per-table history triggers.
--- Design: DATABASE_DESIGN.md sections 2, 7.8, 9, 10.
--- Requires: shared 01_extensions.sql (pgcrypto, pg_trgm), 02_history_trigger.sql
---   (fn_append_history(), ehos_make_history()), 03_outbox.sql (outbox_events)
---   applied first by apply.py. No \i includes in this file.
--- Postgres 16+, lowercase snake_case, app role: ehos_reporting_app.
+-- EHOS  reporting_db  V001__init.sql
+-- reporting-service: report definitions, instances, scheduled reports.
 -- ============================================================================
 
 BEGIN;
 
-CREATE TABLE report_definitions (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code          TEXT NOT NULL,
-    name          TEXT NOT NULL,
-    category      TEXT NOT NULL,
-    datasource    TEXT NOT NULL,
-    params_schema JSONB,
-    is_active     BOOLEAN NOT NULL DEFAULT true,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    created_by    UUID,
-    updated_by    UUID,
-    version       INT NOT NULL DEFAULT 1,
-    status        TEXT NOT NULL,
-    audit_reference TEXT,
-    deleted_at    TIMESTAMPTZ,
-    deleted_by    UUID,
-    deletion_reason TEXT
-);
-
-CREATE UNIQUE INDEX uq_report_definitions_code ON report_definitions (code) WHERE deleted_at IS NULL;
-
-SELECT ehos_make_history('report_definitions');
-
-CREATE TABLE report_runs (
+-- ----------------------------------------------------------------------------
+-- report_definitions — reusable report templates
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS report_definitions (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    report_def_id  UUID NOT NULL REFERENCES report_definitions(id),
-    parameters     JSONB,
-    output_ref     TEXT,
-    status         TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN ('QUEUED','RUNNING','COMPLETED','FAILED','CANCELLED')),
-    requested_by   UUID,
-    started_at     TIMESTAMPTZ,
-    finished_at    TIMESTAMPTZ,
-    error          TEXT,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    name           VARCHAR NOT NULL,
+    report_type    VARCHAR NOT NULL,
+    description    TEXT,
+    parameters_schema JSON,
+    is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_by     UUID,
     updated_by     UUID,
-    version        INT NOT NULL DEFAULT 1,
-    audit_reference TEXT,
+    model_version  INTEGER NOT NULL DEFAULT 1,
+    status         VARCHAR NOT NULL,
+    audit_reference VARCHAR,
+    deleted_at     TIMESTAMPTZ,
+    deleted_by     UUID,
+    deletion_reason TEXT,
+    CONSTRAINT ck_report_type CHECK (report_type IN ('PATIENT_SUMMARY','FINANCIAL','CLINICAL','OPERATIONAL','REGULATORY'))
+);
+
+-- ----------------------------------------------------------------------------
+-- report_instances — execution runs of a definition
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS report_instances (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_definition_id UUID NOT NULL REFERENCES report_definitions(id),
+    parameters     JSON,
+    requested_by   UUID NOT NULL,
+    status         VARCHAR NOT NULL DEFAULT 'QUEUED',
+    result_data    JSON,
+    result_url     VARCHAR,
+    error_message  TEXT,
+    started_at     TIMESTAMPTZ,
+    completed_at   TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by     UUID,
+    updated_by     UUID,
+    model_version  INTEGER NOT NULL DEFAULT 1,
+    audit_reference VARCHAR,
+    deleted_at     TIMESTAMPTZ,
+    deleted_by     UUID,
+    deletion_reason TEXT,
+    CONSTRAINT ck_instance_status CHECK (status IN ('QUEUED','RUNNING','COMPLETED','FAILED','CANCELLED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_instances_definition ON report_instances(report_definition_id);
+CREATE INDEX IF NOT EXISTS idx_instances_requested ON report_instances(requested_by);
+
+-- ----------------------------------------------------------------------------
+-- scheduled_reports — cron-driven report scheduling
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scheduled_reports (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_definition_id UUID NOT NULL REFERENCES report_definitions(id),
+    schedule_cron  VARCHAR NOT NULL,
+    parameters     JSON,
+    delivery_email VARCHAR,
+    is_active      BOOLEAN NOT NULL DEFAULT TRUE,
+    last_run_at    TIMESTAMPTZ,
+    next_run_at    TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_by     UUID,
+    updated_by     UUID,
+    model_version  INTEGER NOT NULL DEFAULT 1,
+    audit_reference VARCHAR,
     deleted_at     TIMESTAMPTZ,
     deleted_by     UUID,
     deletion_reason TEXT
 );
 
-CREATE INDEX idx_report_runs_def_time ON report_runs (report_def_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sched_definition ON scheduled_reports(report_definition_id);
+CREATE INDEX IF NOT EXISTS idx_sched_next_run ON scheduled_reports(next_run_at, is_active);
 
-SELECT ehos_make_history('report_runs');
+-- ----------------------------------------------------------------------------
+-- history tables
+-- ----------------------------------------------------------------------------
+SELECT ehos_make_history('report_definitions');
+SELECT ehos_make_history('report_instances');
+SELECT ehos_make_history('scheduled_reports');
 
+-- ----------------------------------------------------------------------------
+-- grants
+-- ----------------------------------------------------------------------------
 GRANT USAGE ON SCHEMA public TO ehos_reporting_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ehos_reporting_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ehos_reporting_app;

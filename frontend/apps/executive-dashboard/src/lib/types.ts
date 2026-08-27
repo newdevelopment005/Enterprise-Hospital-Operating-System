@@ -43,6 +43,37 @@ export interface Datasets {
   inventory: Series
 }
 
+// --- analytics-service (live multi-department data + locale) ------------------
+
+export interface LocaleInfo {
+  countryCode: string
+  countryName: string
+  currencyCode: string
+  currencySymbol: string
+  timezone: string
+  localeTag: string
+  exchangeRate: number
+  utcOffset: string
+  localTimeIso: string
+  detectedAt: string
+  resolution?: string
+}
+
+export interface DepartmentKpis {
+  code: string
+  name: string
+  kpis: KpiValue[]
+}
+
+export interface AnalyticsOverview {
+  source: string
+  locale: LocaleInfo
+  kpis: KpiValue[]
+  series: Record<string, Series>
+  departments: DepartmentKpis[]
+  generatedAt: string
+}
+
 // --- forecast (prediction-service contract §8) -------------------------------
 
 export interface Forecast {

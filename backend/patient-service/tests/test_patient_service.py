@@ -172,10 +172,19 @@ async def test_add_and_resolve_alert(session, service):
         session, p.id, MedicalAlertIn(alert_type="FALL_RISK", severity="CRITICAL", title="Fall risk")
     )
     await session.flush()
+    await service.add_alert(session, p.id, MedicalAlertIn(alert_type="ALLERGY", severity="HIGH", title="Penicillin"))
+    await session.flush()
+    # one alert already exists from registration (Penicillin allergy)
+    active = await service.list_alerts(session, p.id, active_only=True)
+    assert len(active) == 3
     resolved = await service.resolve_alert(session, p.id, alert.id, reason="evaluated")
     await session.flush()
     assert resolved.active is False
     assert resolved.resolved_reason == "evaluated"
+    still_active = await service.list_alerts(session, p.id, active_only=True)
+    assert len(still_active) == 2
+    all_alerts = await service.list_alerts(session, p.id, active_only=False)
+    assert len(all_alerts) == 3
 
 
 # ---------------------------------------------------------------- merge

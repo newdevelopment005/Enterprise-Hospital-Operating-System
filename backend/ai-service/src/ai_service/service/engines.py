@@ -120,8 +120,25 @@ class _OllamaInference(_BaseInference):
                         "prompt": prompt,
                         "stream": False,
                         "options": {"num_predict": max_tokens},
+                        # Unload the model from RAM shortly after each answer:
+                        # the dev machine is memory-constrained.
+                        "keep_alive": "1m",
                     },
                 )
+                if response.status_code == httpx.codes.NOT_FOUND and model_key:
+                    # App model keys (e.g. "llama-3.1-8b") are registry aliases, not
+                    # Ollama tags; fall back to the configured local model.
+                    model = self.settings.ollama_model
+                    response = await client.post(
+                        url,
+                        json={
+                            "model": model,
+                            "prompt": prompt,
+                            "stream": False,
+                            "options": {"num_predict": max_tokens},
+                            "keep_alive": "1m",
+                        },
+                    )
                 response.raise_for_status()
                 payload = response.json()
         except httpx.HTTPError as err:
