@@ -48,6 +48,9 @@ EHOS has four web applications. Each opens in a normal browser.
 > then open the same patient in the clinical portal using a search or the
 > patient's ID number.
 
+**Video walkthrough of the front-end apps:**
+https://www.youtube.com/watch?v=R2dwGW9597k
+
 ---
 
 ## 3. Your identity and roles
